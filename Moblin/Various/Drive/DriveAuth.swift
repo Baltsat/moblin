@@ -21,7 +21,7 @@ func driveRedirectUri() -> URL? {
     guard !id.isEmpty else {
         return nil
     }
-    return URL(string: "com.googleusercontent.apps.\(id):/")
+    return URL(string: "com.googleusercontent.apps.\(id):/oauthredirect")
 }
 
 final class DriveAuth: NSObject, OIDAuthStateChangeDelegate, @unchecked Sendable {
@@ -55,12 +55,17 @@ final class DriveAuth: NSObject, OIDAuthStateChangeDelegate, @unchecked Sendable
         }
     }
 
+    func invalidateAccessToken() {
+        lock.withLock { authState }?.setNeedsTokenRefresh()
+    }
+
     func didChange(_ state: OIDAuthState) {
         persist(state)
     }
 
     private func persist(_ state: OIDAuthState) {
-        guard let data = try? NSKeyedArchiver.archivedData(withRootObject: state, requiringSecureCoding: false)
+        guard let data = try? NSKeyedArchiver.archivedData(withRootObject: state,
+                                                           requiringSecureCoding: false)
         else {
             return
         }
@@ -78,7 +83,8 @@ final class DriveAuth: NSObject, OIDAuthStateChangeDelegate, @unchecked Sendable
                 } else if let error, (error as NSError).domain == OIDOAuthTokenErrorDomain {
                     continuation.resume(throwing: DriveError.notSignedIn)
                 } else {
-                    continuation.resume(throwing: DriveError.retryable(error?.localizedDescription ?? "token"))
+                    let message = error?.localizedDescription ?? "token"
+                    continuation.resume(throwing: DriveError.retryable(message))
                 }
             }
         }
@@ -134,9 +140,15 @@ extension Model {
                                               redirectURL: redirectUri,
                                               responseType: OIDResponseTypeCode,
                                               additionalParameters: nil)
+        #if targetEnvironment(macCatalyst)
+        guard let userAgent = OIDExternalUserAgentCatalyst(presenting: rootViewController) else {
+            return
+        }
+        #else
         guard let userAgent = OIDExternalUserAgentIOS(presenting: rootViewController) else {
             return
         }
+        #endif
         driveSignInState.session = OIDAuthState.authState(byPresenting: request,
                                                           externalUserAgent: userAgent,
                                                           callback: makeDriveSignInCallback())

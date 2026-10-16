@@ -36,10 +36,5 @@ extension Model {
 
     func stopDriveSession() {
         driveUploader.disarm()
-        if stream.replay.enabled {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                driveUploader.recorderStopped()
-            }
-        }
     }
 }

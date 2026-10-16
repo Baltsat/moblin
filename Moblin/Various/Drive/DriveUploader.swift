@@ -155,6 +155,7 @@ private final class DriveSession {
     }
 
     func pruneParts() {
+        save()
         let first = Int(manifest.acked) / drivePartSize
         for index in 0 ..< first {
             try? FileManager.default.removeItem(at: partUrl(index))
@@ -321,6 +322,7 @@ private actor DriveEngine {
             }
             let session = DriveSession(manifest: manifest, dir: dir)
             session.tailIndex = session.committedParts()
+            session.needsResync = true
             if !manifest.closed {
                 let tailSize = session.tailSize(session.tailIndex)
                 session.manifest.closed = true
@@ -394,7 +396,11 @@ private actor DriveEngine {
         guard let uploadUrl = session.manifest.uploadUrl else {
             return false
         }
-        await syncSidecar(session, force: false)
+        if session.manifest.videoFileId != nil {
+            try await finish(session)
+            return true
+        }
+        try? await syncSidecar(session, force: false)
         if session.needsResync {
             let total = session.manifest.closed ? session.manifest.bytesTotal : nil
             let result = try await api.queryStatus(uploadUrl: uploadUrl, total: total)
@@ -442,20 +448,20 @@ private actor DriveEngine {
         case let .incomplete(next):
             session.manifest.acked = next
             session.pruneParts()
-            session.save()
             return false
         case let .complete(fileId):
             session.manifest.videoFileId = fileId
             session.manifest.acked = session.manifest.bytesTotal
-            session.manifest.done = true
             session.save()
-            await finish(session)
+            try await finish(session)
             return true
         }
     }
 
-    private func finish(_ session: DriveSession) async {
-        await syncSidecar(session, force: true)
+    private func finish(_ session: DriveSession) async throws {
+        try await syncSidecar(session, force: true)
+        session.manifest.done = true
+        session.save()
         logger.info("drive: Uploaded \(session.manifest.name) (\(session.manifest.bytesTotal) bytes)")
         sessions[session.manifest.name] = nil
         try? FileManager.default.removeItem(at: session.dir)
@@ -473,7 +479,7 @@ private actor DriveEngine {
         return phone
     }
 
-    private func syncSidecar(_ session: DriveSession, force: Bool) async {
+    private func syncSidecar(_ session: DriveSession, force: Bool) async throws {
         let manifest = session.manifest
         guard let folder = manifest.folderId else {
             return
@@ -496,31 +502,35 @@ private actor DriveEngine {
                 fps: manifest.info.fps,
                 bitrateKbps: manifest.info.bitrateKbps
             ),
-            bytes: manifest.closed ? manifest.bytesTotal : Int64(session.tailIndex * drivePartSize + session.buffer.count),
+            bytes: manifest.closed
+                ? manifest.bytesTotal
+                : Int64(session.tailIndex * drivePartSize + session.buffer.count),
             events: manifest.events
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let content = try? encoder.encode(sidecar) else {
-            return
-        }
-        do {
-            if let fileId = manifest.sidecarFileId {
+        let content = try encoder.encode(sidecar)
+        if let fileId = manifest.sidecarFileId {
+            do {
                 try await api.updateJson(fileId: fileId, content: content)
-            } else {
+            } catch DriveError.sessionGone {
                 session.manifest.sidecarFileId = try await api.createJson(
                     name: "\(manifest.name).json",
                     folderId: folder,
                     content: content
                 )
             }
-            session.manifest.sidecarSyncedEvents = manifest.events.count
-            session.manifest.sidecarSyncedClosed = manifest.closed
-            session.sidecarSyncedAt = Date()
-            session.save()
-        } catch {
-            logger.info("drive: Sidecar sync failed: \(error)")
+        } else {
+            session.manifest.sidecarFileId = try await api.createJson(
+                name: "\(manifest.name).json",
+                folderId: folder,
+                content: content
+            )
         }
+        session.manifest.sidecarSyncedEvents = manifest.events.count
+        session.manifest.sidecarSyncedClosed = manifest.closed
+        session.sidecarSyncedAt = Date()
+        session.save()
     }
 
     private func updateStatus() {

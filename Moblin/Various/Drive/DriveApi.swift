@@ -1,5 +1,7 @@
 import Foundation
 
+private let driveUploadUrl = "https://www.googleapis.com/upload/drive/v3/files"
+
 enum DriveChunkResult {
     case incomplete(next: Int64)
     case complete(fileId: String)
@@ -50,7 +52,8 @@ final class DriveApi: Sendable {
         let text = String(data: data.prefix(300), encoding: .utf8) ?? ""
         switch response.statusCode {
         case 401:
-            throw DriveError.notSignedIn
+            driveAuth.invalidateAccessToken()
+            throw DriveError.retryable("http 401")
         case 404, 410:
             throw DriveError.sessionGone
         case 403, 408, 429, 500 ... 599:
@@ -90,9 +93,7 @@ final class DriveApi: Sendable {
     }
 
     func startResumable(name: String, folderId: String, mimeType: String) async throws -> String {
-        var request = URLRequest(
-            url: URL(string: "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id")!
-        )
+        var request = URLRequest(url: URL(string: "\(driveUploadUrl)?uploadType=resumable&fields=id")!)
         request.httpMethod = "POST"
         request.setValue("application/json; charset=UTF-8", forHTTPHeaderField: "Content-Type")
         request.setValue(mimeType, forHTTPHeaderField: "X-Upload-Content-Type")
@@ -106,7 +107,11 @@ final class DriveApi: Sendable {
         return location
     }
 
-    func putChunk(uploadUrl: String, data: Data, offset: Int64, total: Int64?) async throws -> DriveChunkResult {
+    func putChunk(uploadUrl: String,
+                  data: Data,
+                  offset: Int64,
+                  total: Int64?) async throws -> DriveChunkResult
+    {
         guard let url = URL(string: uploadUrl) else {
             throw DriveError.sessionGone
         }
@@ -143,9 +148,7 @@ final class DriveApi: Sendable {
 
     func createJson(name: String, folderId: String, content: Data) async throws -> String {
         let boundary = "dais\(UUID().uuidString)"
-        var request = URLRequest(
-            url: URL(string: "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id")!
-        )
+        var request = URLRequest(url: URL(string: "\(driveUploadUrl)?uploadType=multipart&fields=id")!)
         request.httpMethod = "POST"
         request.setValue("multipart/related; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         let metadata = try JSONSerialization.data(withJSONObject: [
@@ -165,9 +168,7 @@ final class DriveApi: Sendable {
     }
 
     func updateJson(fileId: String, content: Data) async throws {
-        var request = URLRequest(
-            url: URL(string: "https://www.googleapis.com/upload/drive/v3/files/\(fileId)?uploadType=media")!
-        )
+        var request = URLRequest(url: URL(string: "\(driveUploadUrl)/\(fileId)?uploadType=media")!)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (response, data) = try await send(request, body: content)

@@ -124,6 +124,9 @@ final class Recorder: NSObject, @unchecked Sendable {
                 }
             } else {
                 self.fileHandle = nil
+                if self.replay {
+                    driveUploader.recorderStopped()
+                }
             }
         }
     }
@@ -505,7 +508,9 @@ final class Recorder: NSObject, @unchecked Sendable {
             }
         } else {
             writer.cancelWriting()
-            driveUploader.recorderStopped()
+            fileWriterQueue.async {
+                driveUploader.recorderStopped()
+            }
         }
         reset()
     }
