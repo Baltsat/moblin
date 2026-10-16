@@ -46,6 +46,9 @@ extension Model {
         if currentRecording == nil {
             return false
         }
+        if stream.recording.uploadToDrive, let path = currentRecording?.url()?.path {
+            driveUploader.localFile(path: path)
+        }
         media.setRecordUrl(url: currentRecording?.url())
         startRecorderIfNeeded()
         return true
@@ -118,6 +121,7 @@ extension Model {
 
     func setIsRecording(value: Bool) {
         isRecording = value
+        updateScreenAutoOff()
         updateLiveActivity()
         updateMacStatusItem()
         setQuickButton(type: .record, isOn: value)

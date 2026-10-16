@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 private let drivePartSize = 8 * 1024 * 1024
 private let driveRootFolderName = "Days"
@@ -26,6 +27,7 @@ struct DriveSessionInfo: Codable, Sendable {
     var height: Int
     var fps: Int
     var bitrateKbps: Int
+    var localPath: String?
 }
 
 struct DriveSidecarEvent: Codable, Sendable {
@@ -169,6 +171,7 @@ enum DriveInput: Sendable {
     case segment(Data, initial: Bool)
     case recorderStopped
     case event(type: String, detail: String)
+    case localFile(String)
     case resume
 }
 
@@ -216,6 +219,8 @@ private actor DriveEngine {
             closeCurrent()
         case let .event(type, detail):
             addEvent(type: type, detail: detail)
+        case let .localFile(path):
+            armed?.localPath = path
         case .resume:
             recover()
             wake()
@@ -352,9 +357,20 @@ private actor DriveEngine {
                 setStatus("Google Drive: failed, \(message)")
             } catch DriveError.sessionGone {
                 logger.info("drive: Upload session is gone")
+                if session.manifest.acked < Int64(drivePartSize) {
+                    session.manifest.uploadUrl = nil
+                    session.manifest.acked = 0
+                    session.needsResync = false
+                    session.save()
+                    continue
+                }
                 session.manifest.failed = true
                 session.save()
-                setStatus("Google Drive: upload session lost")
+                if session.manifest.closed, session.manifest.info.localPath != nil {
+                    try? FileManager.default.removeItem(at: session.dir)
+                    sessions[session.manifest.name] = nil
+                }
+                setStatus("Google Drive: upload session lost, kept the local recording")
             } catch {
                 session.needsResync = true
                 failures += 1
@@ -465,6 +481,9 @@ private actor DriveEngine {
         logger.info("drive: Uploaded \(session.manifest.name) (\(session.manifest.bytesTotal) bytes)")
         sessions[session.manifest.name] = nil
         try? FileManager.default.removeItem(at: session.dir)
+        if let localPath = session.manifest.info.localPath {
+            try? FileManager.default.removeItem(atPath: localPath)
+        }
         setStatus("Google Drive: uploaded \(session.manifest.name)")
         wake()
     }
@@ -560,6 +579,7 @@ private actor DriveEngine {
 
 final class DriveUploader: @unchecked Sendable {
     private let inputs: AsyncStream<DriveInput>.Continuation
+    private let pathMonitor = NWPathMonitor()
 
     init() {
         let (stream, continuation) = makeStream(of: DriveInput.self)
@@ -573,6 +593,12 @@ final class DriveUploader: @unchecked Sendable {
                 await engine.handle(input)
             }
         }
+        pathMonitor.pathUpdateHandler = { [continuation] path in
+            if path.status == .satisfied {
+                continuation.yield(.resume)
+            }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "com.eerimoq.moblin.drive.path"))
     }
 
     func arm(info: DriveSessionInfo) {
@@ -593,6 +619,10 @@ final class DriveUploader: @unchecked Sendable {
 
     func event(type: String, detail: String = "") {
         inputs.yield(.event(type: type, detail: detail))
+    }
+
+    func localFile(path: String) {
+        inputs.yield(.localFile(path))
     }
 
     func resume() {

@@ -741,6 +741,7 @@ final class Model: NSObject, ObservableObject {
     var moveToGimbalPresetQueueRunning = false
     var gimbalPresetLongPressTimers: [String: MainTimer] = [:]
     var latestKnownLocation: CLLocation?
+    var followOrientationWork: DispatchWorkItem?
     var slopePercent = 0.0
     var previousSlopeAltitude: Double? = 0.0
     var previousSlopeDistance = 0.0
@@ -821,6 +822,7 @@ final class Model: NSObject, ObservableObject {
         settings.load()
         streamingHistory.load()
         replaysStorage.load()
+        applyDaysDefaults()
         setCurrentStream()
         updateIsPortrait()
         if orientation.isPortrait {
@@ -1018,22 +1020,7 @@ final class Model: NSObject, ObservableObject {
     }
 
     private func makeBuyIconsToastIfNeeded() -> Bool {
-        if store.hasBoughtSomething {
-            return false
-        }
-        if enterForegroundCount < 100 {
-            return false
-        }
-        if enterForegroundCount < 500, (enterForegroundCount % 10) != 0 {
-            return false
-        }
-        makeToast(title: randomBuyIconsTitle(),
-                  subTitle: String(localized: "Tap here to open the store."))
-        {
-            self.toggleShowingPanel(type: nil, panel: .none)
-            self.toggleShowingPanel(type: nil, panel: .store)
-        }
-        return true
+        false
     }
 
     func makePortErrorToast(port: String) {
@@ -1574,6 +1561,8 @@ final class Model: NSObject, ObservableObject {
         }
         inServiceBackground = false
         stopChatPhoneBackgroundAudio()
+        driveUploader.resume()
+        followDeviceOrientation()
         switch backgroundRunLevel() {
         case .full:
             maybeEnableScreenPreview()
@@ -1771,26 +1760,40 @@ final class Model: NSObject, ObservableObject {
     }
 
     private func followDeviceOrientation() {
+        followOrientationWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.applyDeviceOrientation()
+        }
+        followOrientationWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
+    }
+
+    private func applyDeviceOrientation() {
         guard !isMac(), !isLive, !isRecording else {
             return
         }
         let portrait: Bool
         switch UIDevice.current.orientation {
-        case .portrait:
+        case .portrait, .portraitUpsideDown:
             portrait = true
         case .landscapeLeft, .landscapeRight:
             portrait = false
         default:
             return
         }
+        if database.portrait {
+            database.portrait = false
+        }
         guard stream.portrait != portrait else {
             return
         }
         stream.portrait = portrait
+        updateIsPortrait()
+        updateOrientationLock()
         setCurrentStream(stream: stream)
         reloadStream()
         resetSelectedScene(changeScene: false)
-        updateOrientationLock()
+        updateOrientation()
     }
 
     func startPeriodicTimers() {
@@ -2353,7 +2356,7 @@ final class Model: NSObject, ObservableObject {
     }
 
     func updateScreenAutoOff() {
-        UIApplication.shared.isIdleTimerDisabled = (showingRemoteControl || isLive || isChatPhone())
+        UIApplication.shared.isIdleTimerDisabled = (showingRemoteControl || isLive || isRecording || isChatPhone())
     }
 
     func reloadConnections() {
