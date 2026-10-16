@@ -20,6 +20,7 @@ final class DriveApi: Sendable {
 
     init() {
         let configuration = URLSessionConfiguration.ephemeral
+        configuration.allowsCellularAccess = false
         configuration.timeoutIntervalForRequest = 90
         configuration.waitsForConnectivity = false
         session = URLSession(configuration: configuration)

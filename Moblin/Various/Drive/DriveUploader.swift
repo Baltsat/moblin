@@ -594,7 +594,7 @@ final class DriveUploader: @unchecked Sendable {
             }
         }
         pathMonitor.pathUpdateHandler = { [continuation] path in
-            if path.status == .satisfied {
+            if path.status == .satisfied, !path.usesInterfaceType(.cellular) {
                 continuation.yield(.resume)
             }
         }
