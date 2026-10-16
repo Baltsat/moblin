@@ -1,0 +1,593 @@
+import Foundation
+
+private let drivePartSize = 8 * 1024 * 1024
+private let driveRootFolderName = "Days"
+private let drivePhoneFolderName = "phone"
+private let driveMimeType = "video/mp4"
+private let driveSidecarInterval: TimeInterval = 300
+
+private let driveNameFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "Asia/Makassar")
+    formatter.dateFormat = "yyyy-MM-dd_HHmmss"
+    return formatter
+}()
+
+private func nowMs() -> Int64 {
+    Int64(Date().timeIntervalSince1970 * 1000)
+}
+
+struct DriveSessionInfo: Codable, Sendable {
+    var device: String
+    var codec: String
+    var width: Int
+    var height: Int
+    var fps: Int
+    var bitrateKbps: Int
+}
+
+struct DriveSidecarEvent: Codable, Sendable {
+    var tMs: Int64
+    var type: String
+    var detail: String
+
+    enum CodingKeys: String, CodingKey {
+        case tMs = "t_ms"
+        case type
+        case detail
+    }
+}
+
+private struct DriveSidecar: Encodable {
+    struct Video: Encodable {
+        let codec: String
+        let width: Int
+        let height: Int
+        let fps: Int
+        let bitrateKbps: Int
+
+        enum CodingKeys: String, CodingKey {
+            case codec
+            case width
+            case height
+            case fps
+            case bitrateKbps = "bitrate_kbps"
+        }
+    }
+
+    struct Audio: Encodable {
+        let codec = "aac"
+        let rate = 48000
+        let channels = 2
+    }
+
+    let stream = "phone"
+    let session: String
+    let startMs: Int64
+    let endMs: Int64?
+    let tz = "Asia/Makassar"
+    let device: String
+    let video: Video
+    let audio = Audio()
+    let bytes: Int64
+    let events: [DriveSidecarEvent]
+
+    enum CodingKeys: String, CodingKey {
+        case stream
+        case session
+        case startMs = "start_ms"
+        case endMs = "end_ms"
+        case tz
+        case device
+        case video
+        case audio
+        case bytes
+        case events
+    }
+}
+
+private struct DriveManifest: Codable {
+    var name: String
+    var startMs: Int64
+    var endMs: Int64?
+    var info: DriveSessionInfo
+    var events: [DriveSidecarEvent] = []
+    var closed = false
+    var bytesTotal: Int64 = 0
+    var uploadUrl: String?
+    var acked: Int64 = 0
+    var folderId: String?
+    var videoFileId: String?
+    var sidecarFileId: String?
+    var sidecarSyncedEvents = 0
+    var sidecarSyncedClosed = false
+    var done = false
+    var failed = false
+}
+
+private final class DriveSession {
+    var manifest: DriveManifest
+    let dir: URL
+    var tailIndex = 0
+    var buffer = Data()
+    var handle: FileHandle?
+    var needsResync = false
+    var sidecarSyncedAt = Date.distantPast
+
+    init(manifest: DriveManifest, dir: URL) {
+        self.manifest = manifest
+        self.dir = dir
+    }
+
+    func partUrl(_ index: Int) -> URL {
+        dir.appending(component: String(format: "part-%06d.bin", index))
+    }
+
+    func tailUrl(_ index: Int) -> URL {
+        dir.appending(component: String(format: "tail-%06d.bin", index))
+    }
+
+    var manifestUrl: URL {
+        dir.appending(component: "manifest.json")
+    }
+
+    func save() {
+        guard let data = try? JSONEncoder().encode(manifest) else {
+            return
+        }
+        try? data.write(to: manifestUrl, options: .atomic)
+    }
+
+    func committedParts() -> Int {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        return names.compactMap { name -> Int? in
+            guard name.hasPrefix("tail-"), name.hasSuffix(".bin") else {
+                return nil
+            }
+            return Int(name.dropFirst(5).dropLast(4))
+        }.max() ?? 0
+    }
+
+    func tailSize(_ index: Int) -> Int {
+        (try? FileManager.default.attributesOfItem(atPath: tailUrl(index).path)[.size] as? Int) ?? 0
+    }
+
+    func pruneParts() {
+        let first = Int(manifest.acked) / drivePartSize
+        for index in 0 ..< first {
+            try? FileManager.default.removeItem(at: partUrl(index))
+        }
+    }
+}
+
+enum DriveInput: Sendable {
+    case arm(DriveSessionInfo)
+    case disarm
+    case segment(Data, initial: Bool)
+    case recorderStopped
+    case event(type: String, detail: String)
+    case resume
+}
+
+private func makeStream<T: Sendable>(
+    of _: T.Type,
+    policy: AsyncStream<T>.Continuation.BufferingPolicy = .unbounded
+) -> (AsyncStream<T>, AsyncStream<T>.Continuation) {
+    var continuation: AsyncStream<T>.Continuation?
+    let stream = AsyncStream<T>(bufferingPolicy: policy) { continuation = $0 }
+    return (stream, continuation!)
+}
+
+private actor DriveEngine {
+    private let api = DriveApi()
+    private let root = createAndGetDirectory(name: "DriveOutbox")
+    private var armed: DriveSessionInfo?
+    private var current: DriveSession?
+    private var sessions: [String: DriveSession] = [:]
+    private var failures = 0
+    private var folderId: String?
+    private let wakeStream: AsyncStream<Void>
+    private let wakeContinuation: AsyncStream<Void>.Continuation
+
+    init() {
+        let pair = makeStream(of: Void.self, policy: .bufferingNewest(1))
+        wakeStream = pair.0
+        wakeContinuation = pair.1
+    }
+
+    func run() async {
+        for await _ in wakeStream {
+            await drain()
+        }
+    }
+
+    func handle(_ input: DriveInput) {
+        switch input {
+        case let .arm(info):
+            armed = info
+        case .disarm:
+            armed = nil
+        case let .segment(data, initial):
+            ingest(data, initial: initial)
+        case .recorderStopped:
+            closeCurrent()
+        case let .event(type, detail):
+            addEvent(type: type, detail: detail)
+        case .resume:
+            recover()
+            wake()
+        }
+    }
+
+    private func wake() {
+        wakeContinuation.yield()
+    }
+
+    private func ingest(_ data: Data, initial: Bool) {
+        if initial {
+            closeCurrent()
+            guard let armed else {
+                return
+            }
+            startSession(info: armed)
+        }
+        guard let session = current else {
+            return
+        }
+        session.buffer.append(data)
+        try? session.handle?.write(contentsOf: data)
+        var cut = false
+        while session.buffer.count >= drivePartSize {
+            cutPart(session)
+            cut = true
+        }
+        if cut {
+            wake()
+        }
+        updateStatus()
+    }
+
+    private func startSession(info: DriveSessionInfo) {
+        let start = Date()
+        let name = "\(driveNameFormatter.string(from: start))_phone"
+        let dir = createAndGetDirectory(root: root, name: name)
+        let session = DriveSession(
+            manifest: DriveManifest(name: name, startMs: nowMs(), info: info),
+            dir: dir
+        )
+        FileManager.default.createFile(atPath: session.tailUrl(0).path, contents: nil)
+        session.handle = try? FileHandle(forWritingTo: session.tailUrl(0))
+        session.save()
+        sessions[name] = session
+        current = session
+        wake()
+    }
+
+    private func cutPart(_ session: DriveSession) {
+        let index = session.tailIndex
+        let part = Data(session.buffer.prefix(drivePartSize))
+        let rest = Data(session.buffer.dropFirst(drivePartSize))
+        guard (try? part.write(to: session.partUrl(index), options: .atomic)) != nil,
+              (try? rest.write(to: session.tailUrl(index + 1), options: .atomic)) != nil
+        else {
+            logger.info("drive: Failed to cut part \(index)")
+            return
+        }
+        try? session.handle?.close()
+        session.handle = try? FileHandle(forWritingTo: session.tailUrl(index + 1))
+        _ = try? session.handle?.seekToEnd()
+        try? FileManager.default.removeItem(at: session.tailUrl(index))
+        session.buffer = rest
+        session.tailIndex = index + 1
+    }
+
+    private func closeCurrent() {
+        guard let session = current else {
+            return
+        }
+        try? session.handle?.close()
+        session.handle = nil
+        session.manifest.closed = true
+        session.manifest.endMs = nowMs()
+        session.manifest.bytesTotal = Int64(session.tailIndex * drivePartSize + session.buffer.count)
+        session.save()
+        current = nil
+        wake()
+        updateStatus()
+    }
+
+    private func addEvent(type: String, detail: String) {
+        guard let session = current else {
+            return
+        }
+        session.manifest.events.append(DriveSidecarEvent(tMs: nowMs(), type: type, detail: detail))
+        session.save()
+    }
+
+    private func recover() {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        for name in names.sorted() where sessions[name] == nil {
+            let dir = root.appending(component: name)
+            guard let data = try? Data(contentsOf: dir.appending(component: "manifest.json")),
+                  let manifest = try? JSONDecoder().decode(DriveManifest.self, from: data)
+            else {
+                continue
+            }
+            if manifest.done {
+                try? FileManager.default.removeItem(at: dir)
+                continue
+            }
+            let session = DriveSession(manifest: manifest, dir: dir)
+            session.tailIndex = session.committedParts()
+            if !manifest.closed {
+                let tailSize = session.tailSize(session.tailIndex)
+                session.manifest.closed = true
+                session.manifest.endMs = nowMs()
+                session.manifest.bytesTotal = Int64(session.tailIndex * drivePartSize + tailSize)
+                session.save()
+            }
+            sessions[name] = session
+        }
+    }
+
+    private func drain() async {
+        while let session = nextSession() {
+            do {
+                guard try await step(session) else {
+                    return
+                }
+                failures = 0
+                updateStatus()
+            } catch DriveError.notSignedIn {
+                setStatus("Google Drive: sign in again")
+                return
+            } catch DriveError.fatal(let message) {
+                logger.info("drive: Fatal: \(message)")
+                session.manifest.failed = true
+                session.save()
+                setStatus("Google Drive: failed, \(message)")
+            } catch DriveError.sessionGone {
+                logger.info("drive: Upload session is gone")
+                session.manifest.failed = true
+                session.save()
+                setStatus("Google Drive: upload session lost")
+            } catch {
+                session.needsResync = true
+                failures += 1
+                let delay = min(5 << min(failures, 5), 120)
+                logger.info("drive: Retry in \(delay) seconds after \(error)")
+                setStatus("Google Drive: waiting for network, retry in \(delay) s")
+                let continuation = wakeContinuation
+                Task {
+                    try? await Task.sleep(for: .seconds(delay))
+                    continuation.yield()
+                }
+                return
+            }
+        }
+        updateStatus()
+    }
+
+    private func nextSession() -> DriveSession? {
+        sessions.values
+            .filter { !$0.manifest.done && !$0.manifest.failed }
+            .min { $0.manifest.name < $1.manifest.name }
+    }
+
+    private func step(_ session: DriveSession) async throws -> Bool {
+        guard driveAuth.isSignedIn else {
+            throw DriveError.notSignedIn
+        }
+        if session.manifest.uploadUrl == nil {
+            let folder = try await ensureFolder()
+            session.manifest.folderId = folder
+            session.manifest.uploadUrl = try await api.startResumable(
+                name: "\(session.manifest.name).mp4",
+                folderId: folder,
+                mimeType: driveMimeType
+            )
+            session.manifest.acked = 0
+            session.save()
+        }
+        guard let uploadUrl = session.manifest.uploadUrl else {
+            return false
+        }
+        await syncSidecar(session, force: false)
+        if session.needsResync {
+            let total = session.manifest.closed ? session.manifest.bytesTotal : nil
+            let result = try await api.queryStatus(uploadUrl: uploadUrl, total: total)
+            session.needsResync = false
+            if try await apply(result, to: session) {
+                return true
+            }
+        }
+        let committed = current === session ? session.tailIndex : session.committedParts()
+        let ackedParts = Int(session.manifest.acked) / drivePartSize
+        if ackedParts < committed {
+            let part = try Data(contentsOf: session.partUrl(ackedParts))
+            let skip = Int(session.manifest.acked) - ackedParts * drivePartSize
+            let chunk = part.dropFirst(skip)
+            session.needsResync = true
+            let result = try await api.putChunk(
+                uploadUrl: uploadUrl,
+                data: Data(chunk),
+                offset: session.manifest.acked,
+                total: nil
+            )
+            session.needsResync = false
+            _ = try await apply(result, to: session)
+            return true
+        }
+        guard session.manifest.closed else {
+            return false
+        }
+        let tail = (try? Data(contentsOf: session.tailUrl(committed))) ?? Data()
+        let skip = max(Int(session.manifest.acked) - committed * drivePartSize, 0)
+        session.needsResync = true
+        let result = try await api.putChunk(
+            uploadUrl: uploadUrl,
+            data: Data(tail.dropFirst(skip)),
+            offset: session.manifest.acked,
+            total: session.manifest.bytesTotal
+        )
+        session.needsResync = false
+        _ = try await apply(result, to: session)
+        return true
+    }
+
+    private func apply(_ result: DriveChunkResult, to session: DriveSession) async throws -> Bool {
+        switch result {
+        case let .incomplete(next):
+            session.manifest.acked = next
+            session.pruneParts()
+            session.save()
+            return false
+        case let .complete(fileId):
+            session.manifest.videoFileId = fileId
+            session.manifest.acked = session.manifest.bytesTotal
+            session.manifest.done = true
+            session.save()
+            await finish(session)
+            return true
+        }
+    }
+
+    private func finish(_ session: DriveSession) async {
+        await syncSidecar(session, force: true)
+        logger.info("drive: Uploaded \(session.manifest.name) (\(session.manifest.bytesTotal) bytes)")
+        sessions[session.manifest.name] = nil
+        try? FileManager.default.removeItem(at: session.dir)
+        setStatus("Google Drive: uploaded \(session.manifest.name)")
+        wake()
+    }
+
+    private func ensureFolder() async throws -> String {
+        if let folderId {
+            return folderId
+        }
+        let dais = try await api.findOrCreateFolder(name: driveRootFolderName, parentId: "root")
+        let phone = try await api.findOrCreateFolder(name: drivePhoneFolderName, parentId: dais)
+        folderId = phone
+        return phone
+    }
+
+    private func syncSidecar(_ session: DriveSession, force: Bool) async {
+        let manifest = session.manifest
+        guard let folder = manifest.folderId else {
+            return
+        }
+        let changed = manifest.events.count > manifest.sidecarSyncedEvents
+            || (manifest.closed && !manifest.sidecarSyncedClosed)
+        let stale = Date().timeIntervalSince(session.sidecarSyncedAt) > driveSidecarInterval
+        guard manifest.sidecarFileId == nil || force || (changed && (stale || manifest.closed)) else {
+            return
+        }
+        let sidecar = DriveSidecar(
+            session: String(manifest.name.dropLast("_phone".count)),
+            startMs: manifest.startMs,
+            endMs: manifest.endMs,
+            device: manifest.info.device,
+            video: .init(
+                codec: manifest.info.codec,
+                width: manifest.info.width,
+                height: manifest.info.height,
+                fps: manifest.info.fps,
+                bitrateKbps: manifest.info.bitrateKbps
+            ),
+            bytes: manifest.closed ? manifest.bytesTotal : Int64(session.tailIndex * drivePartSize + session.buffer.count),
+            events: manifest.events
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let content = try? encoder.encode(sidecar) else {
+            return
+        }
+        do {
+            if let fileId = manifest.sidecarFileId {
+                try await api.updateJson(fileId: fileId, content: content)
+            } else {
+                session.manifest.sidecarFileId = try await api.createJson(
+                    name: "\(manifest.name).json",
+                    folderId: folder,
+                    content: content
+                )
+            }
+            session.manifest.sidecarSyncedEvents = manifest.events.count
+            session.manifest.sidecarSyncedClosed = manifest.closed
+            session.sidecarSyncedAt = Date()
+            session.save()
+        } catch {
+            logger.info("drive: Sidecar sync failed: \(error)")
+        }
+    }
+
+    private func updateStatus() {
+        let pending = sessions.values.filter { !$0.manifest.done }
+        guard !pending.isEmpty else {
+            return
+        }
+        var queued: Int64 = 0
+        for session in pending {
+            let total = session.manifest.closed
+                ? session.manifest.bytesTotal
+                : Int64(session.tailIndex * drivePartSize + session.buffer.count)
+            queued += total - session.manifest.acked
+        }
+        let live = current != nil ? "recording, " : ""
+        setStatus("Google Drive: \(live)\(UInt64(max(queued, 0)).formatBytes()) queued")
+    }
+
+    private func setStatus(_ text: String) {
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                driveStatus.text = text
+            }
+        }
+    }
+}
+
+final class DriveUploader: @unchecked Sendable {
+    private let inputs: AsyncStream<DriveInput>.Continuation
+
+    init() {
+        let (stream, continuation) = makeStream(of: DriveInput.self)
+        inputs = continuation
+        let engine = DriveEngine()
+        Task.detached {
+            await engine.run()
+        }
+        Task.detached {
+            for await input in stream {
+                await engine.handle(input)
+            }
+        }
+    }
+
+    func arm(info: DriveSessionInfo) {
+        inputs.yield(.arm(info))
+    }
+
+    func disarm() {
+        inputs.yield(.disarm)
+    }
+
+    func segment(_ data: Data, initial: Bool) {
+        inputs.yield(.segment(data, initial: initial))
+    }
+
+    func recorderStopped() {
+        inputs.yield(.recorderStopped)
+    }
+
+    func event(type: String, detail: String = "") {
+        inputs.yield(.event(type: type, detail: detail))
+    }
+
+    func resume() {
+        inputs.yield(.resume)
+    }
+}
+
+let driveUploader = DriveUploader()

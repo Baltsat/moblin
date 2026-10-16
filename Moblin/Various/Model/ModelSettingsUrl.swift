@@ -40,6 +40,18 @@ extension Model {
             if let backgroundStreamingPiP = stream.backgroundStreamingPiP {
                 targetStream.backgroundStreamingPiP = backgroundStreamingPiP
             }
+            if let autoGoLive = stream.autoGoLive {
+                targetStream.autoGoLive = autoGoLive
+            }
+            if let autoStartRecording = stream.autoStartRecording {
+                targetStream.recording.autoStartRecording = autoStartRecording
+            }
+            if let autoStopRecording = stream.autoStopRecording {
+                targetStream.recording.autoStopRecording = autoStopRecording
+            }
+            if let uploadToDrive = stream.uploadToDrive {
+                targetStream.recording.uploadToDrive = uploadToDrive
+            }
             if let video = stream.video {
                 if let resolution = video.resolution {
                     targetStream.resolution = resolution

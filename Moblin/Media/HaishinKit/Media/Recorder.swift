@@ -120,6 +120,7 @@ final class Recorder: NSObject, @unchecked Sendable {
                 self.fileHandle = FileHandle(forWritingAtPath: url.path)
                 if let initSegment = self.initSegment {
                     self.fileHandle?.write(initSegment)
+                    driveUploader.segment(initSegment, initial: true)
                 }
             } else {
                 self.fileHandle = nil
@@ -488,16 +489,23 @@ final class Recorder: NSObject, @unchecked Sendable {
         guard writer.status == .writing else {
             logger.info("recorder: Failed to finish writing \(writer.error?.localizedDescription ?? "")")
             reset()
+            fileWriterQueue.async {
+                driveUploader.recorderStopped()
+            }
             return
         }
         // mediaplaybackd iOS process leaks threads and uses a lot of CPU when calling
         // finishWriting when audio and video has not been appended.
         if hasAudioAndVideoBeenAppended() {
             writer.finishWriting {
+                fileWriterQueue.async {
+                    driveUploader.recorderStopped()
+                }
                 self.delegate?.recorderFinished()
             }
         } else {
             writer.cancelWriting()
+            driveUploader.recorderStopped()
         }
         reset()
     }
@@ -533,6 +541,7 @@ extension Recorder: AVAssetWriterDelegate {
     {
         fileWriterQueue.async {
             self.fileHandle?.write(segmentData)
+            driveUploader.segment(segmentData, initial: segmentType == .initialization)
             if segmentType == .initialization {
                 self.initSegment = segmentData
             }

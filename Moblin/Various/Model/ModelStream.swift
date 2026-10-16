@@ -563,6 +563,9 @@ extension Model {
     }
 
     private func onConnected() {
+        if streamState == .disconnected {
+            driveUploader.event(type: "reconnect")
+        }
         makeYouAreLiveToast()
         streamStartTime = .now
         streamState = .connected
@@ -574,6 +577,7 @@ extension Model {
             return
         }
         logger.info("stream: Disconnected with reason: \(reason)")
+        driveUploader.event(type: "drop", detail: reason)
         let subTitle = String(localized: "Attempting again in 5 seconds.")
         if streamState == .connected {
             streamTotalBytes += UInt64(media.streamTotal())

@@ -702,6 +702,7 @@ class SettingsStreamRecording: Codable, ObservableObject {
     @Published var audioBitrate: UInt32 = 128_000
     @Published var autoStartRecording: Bool = false
     @Published var autoStopRecording: Bool = false
+    @Published var uploadToDrive: Bool = false
     @Published var cleanRecordings: Bool = false
     @Published var cleanSnapshots: Bool = false
     @Published var recordingPath: Data?
@@ -718,6 +719,7 @@ class SettingsStreamRecording: Codable, ObservableObject {
         case audioBitrate
         case autoStartRecording
         case autoStopRecording
+        case uploadToDrive
         case cleanRecordings
         case cleanSnapshots
         case recordingPath
@@ -734,6 +736,7 @@ class SettingsStreamRecording: Codable, ObservableObject {
         try container.encode(.audioBitrate, audioBitrate)
         try container.encode(.autoStartRecording, autoStartRecording)
         try container.encode(.autoStopRecording, autoStopRecording)
+        try container.encode(.uploadToDrive, uploadToDrive)
         try container.encode(.cleanRecordings, cleanRecordings)
         try container.encode(.cleanSnapshots, cleanSnapshots)
         try container.encode(.recordingPath, recordingPath)
@@ -754,6 +757,7 @@ class SettingsStreamRecording: Codable, ObservableObject {
         audioBitrate = container.decode(.audioBitrate, UInt32.self, 128_000)
         autoStartRecording = container.decode(.autoStartRecording, Bool.self, false)
         autoStopRecording = container.decode(.autoStopRecording, Bool.self, false)
+        uploadToDrive = container.decode(.uploadToDrive, Bool.self, false)
         cleanRecordings = container.decode(.cleanRecordings, Bool.self, false)
         cleanSnapshots = container.decode(.cleanSnapshots, Bool.self, false)
         recordingPath = container.decode(.recordingPath, Data?.self, nil)
@@ -770,6 +774,7 @@ class SettingsStreamRecording: Codable, ObservableObject {
         new.audioBitrate = audioBitrate
         new.autoStartRecording = autoStartRecording
         new.autoStopRecording = autoStopRecording
+        new.uploadToDrive = uploadToDrive
         new.cleanRecordings = cleanRecordings
         new.cleanSnapshots = cleanSnapshots
         new.recordingPath = recordingPath

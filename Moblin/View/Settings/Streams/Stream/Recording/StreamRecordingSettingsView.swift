@@ -191,6 +191,7 @@ struct StreamRecordingSettingsView: View {
                 .disabled(stream.enabled && model.isRecording)
             }
             RecordingPathView(model: model, recording: recording)
+            StreamRecordingDriveView(recording: recording)
             Section {
                 Toggle("Clean recordings", isOn: $recording.cleanRecordings)
                     .onChange(of: recording.cleanRecordings) { _ in

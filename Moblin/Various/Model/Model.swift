@@ -1146,6 +1146,7 @@ final class Model: NSObject, ObservableObject {
         }
         startPeriodicTimers()
         setupThermalState()
+        driveUploader.resume()
         setupMacStatusItem()
         removeUnusedImages()
         removeUnusedAlertMedias()
@@ -2744,6 +2745,7 @@ final class Model: NSObject, ObservableObject {
         let state = ProcessInfo.processInfo.thermalState
         if state != statusOther.thermalState {
             statusOther.thermalState = state
+            driveUploader.event(type: "thermal", detail: state.string())
         }
         streamingHistoryStream?.updateHighestThermalState(thermalState: ThermalState(from: state))
         if isWatchLocal() {

@@ -7,5 +7,8 @@ BASE_PRODUCT_BUNDLE_IDENTIFIER = com.eerimoq.Mobs
 // 'free' or 'all'. Use 'free' unless you know what you are doing.
 CAPABILITIES = free
 
+// Google OAuth iOS client ID for Drive uploads, e.g. 123-abc.apps.googleusercontent.com.
+DRIVE_CLIENT_ID =
+
 // Optional. Moblin website API base URL. Note the $() to avoid the // comment.
 // MOBLIN_WEBSITE_API_URL[config=Debug] = http:/$()/macpro.home:8080

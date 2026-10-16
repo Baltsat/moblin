@@ -12,6 +12,7 @@ extension Model {
             return
         }
         setIsRecording(value: true)
+        startDriveSessionIfNeeded()
         if !resumeRecording() {
             if stream.recording.isDefaultRecordingPath() {
                 makeErrorToast(title: String(localized: "Failed to start recording"))
@@ -20,6 +21,7 @@ extension Model {
                                subTitle: String(localized: "Is the disk connected?"))
             }
             setIsRecording(value: false)
+            driveUploader.disarm()
             return
         }
         macrosEventOccurred(MacroEvent(event: .startRecording))
@@ -31,6 +33,7 @@ extension Model {
         }
         macrosEventOccurred(MacroEvent(event: .stopRecording))
         setIsRecording(value: false)
+        stopDriveSession()
         if let toastTitle {
             makeToast(title: toastTitle, subTitle: toastSubTitle)
         }
@@ -91,6 +94,9 @@ extension Model {
             let elapsed = uptimeFormatter.string(from: now.timeIntervalSince(currentRecording.startTime))!
             let size = currentRecording.url()?.fileSize.formatBytes() ?? "-"
             recording.length = "\(elapsed) (\(size))"
+            if stream.recording.uploadToDrive, !driveStatus.text.isEmpty {
+                recording.length += " | \(driveStatus.text)"
+            }
             if isWatchLocal() {
                 sendRecordingLengthToWatch(recordingLength: recording.length)
             }
