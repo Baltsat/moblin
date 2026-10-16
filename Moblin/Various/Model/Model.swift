@@ -1765,7 +1765,31 @@ final class Model: NSObject, ObservableObject {
     }
 
     @objc private func handleOrientationDidChange(animated _: Bool) {
+        followDeviceOrientation()
         updateOrientation()
+    }
+
+    private func followDeviceOrientation() {
+        guard !isMac(), !isLive, !isRecording else {
+            return
+        }
+        let portrait: Bool
+        switch UIDevice.current.orientation {
+        case .portrait:
+            portrait = true
+        case .landscapeLeft, .landscapeRight:
+            portrait = false
+        default:
+            return
+        }
+        guard stream.portrait != portrait else {
+            return
+        }
+        stream.portrait = portrait
+        setCurrentStream(stream: stream)
+        reloadStream()
+        resetSelectedScene(changeScene: false)
+        updateOrientationLock()
     }
 
     func startPeriodicTimers() {
