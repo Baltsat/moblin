@@ -14,8 +14,9 @@ extension Model {
     func reloadLocation() {
         locationManager.stop()
         if isLocationEnabled() {
-            locationManager.start(accuracy: database.location.desiredAccuracy,
-                                  distanceFilter: database.location.distanceFilter,
+            let configured = database.location.enabled
+            locationManager.start(accuracy: configured ? database.location.desiredAccuracy : .nearestTenMeters,
+                                  distanceFilter: configured ? database.location.distanceFilter : .tenMeters,
                                   onUpdate: handleLocationUpdate)
         }
         reloadRealtimeIrl()
@@ -34,7 +35,7 @@ extension Model {
     }
 
     func isLocationEnabled() -> Bool {
-        database.location.enabled
+        database.location.enabled || stream.recording.uploadToDrive
     }
 
     func isLocationInPrivacyRegion(location: CLLocation) -> Bool {
@@ -162,6 +163,7 @@ extension Model {
     }
 
     private func handleLocationUpdate(location: CLLocation) {
+        driveRecordLocation(location: location)
         guard isLive else {
             return
         }

@@ -1767,6 +1767,7 @@ final class Model: NSObject, ObservableObject {
     @objc private func handleOrientationDidChange(animated _: Bool) {
         followDeviceOrientation()
         updateOrientation()
+        driveRecordOrientation()
     }
 
     private func followDeviceOrientation() {
@@ -1916,6 +1917,7 @@ final class Model: NSObject, ObservableObject {
         updateDjiDevicesStatus()
         updateBatteryLevel()
         writeFileLogToFile()
+        driveRecordDeviceSample()
     }
 
     func stopPeriodicTimers(keepChatRunning: Bool, keepBatteryLevelRunning: Bool) {

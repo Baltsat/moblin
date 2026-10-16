@@ -2,32 +2,12 @@ import SwiftUI
 
 let settingsHalfWidth = 350.0
 
-private struct AppModeView: View {
-    @EnvironmentObject var model: Model
-    @ObservedObject var database: Database
-
-    var body: some View {
-        Picker("App mode", selection: $database.appMode) {
-            ForEach(SettingsAppMode.allCases, id: \.self) {
-                Text($0.toString())
-            }
-        }
-        .disabled(model.isLive || model.isRecording)
-        .onChange(of: database.appMode) { _ in
-            model.appModeChanged()
-        }
-    }
-}
-
 struct SettingsView: View {
     @EnvironmentObject var model: Model
     @ObservedObject var database: Database
 
     var body: some View {
         Form {
-            if model.isLive {
-                InfoBannerView(text: "Settings that would stop the stream are disabled when live.")
-            }
             Section {
                 NavigationLink {
                     StreamsSettingsView(createStreamWizard: model.createStreamWizard, database: database)
@@ -40,38 +20,23 @@ struct SettingsView: View {
                     Label("Scenes", systemImage: "photo.on.rectangle")
                 }
                 NavigationLink {
-                    ChatSettingsView(model: model,
-                                     database: database,
-                                     chat: database.chat,
-                                     stream: model.stream)
+                    CameraSettingsView(database: database, stream: model.stream, color: database.color)
                 } label: {
-                    Label("Chat", systemImage: "message")
+                    Label("Camera", systemImage: "camera")
+                }
+                NavigationLink {
+                    AudioSettingsView(database: database,
+                                      stream: model.stream,
+                                      mic: model.mic,
+                                      debug: database.debug,
+                                      audio: database.audio)
+                } label: {
+                    Label("Audio", systemImage: "waveform")
                 }
                 NavigationLink {
                     DisplaySettingsView(database: database)
                 } label: {
                     Label("Display", systemImage: "rectangle.inset.topright.fill")
-                }
-                NavigationLink {
-                    CameraSettingsView(database: database, stream: model.stream, color: database.color)
-                } label: {
-                    Label("Camera", systemImage: "camera")
-                }
-                if database.showAllSettings {
-                    NavigationLink {
-                        AudioSettingsView(database: database,
-                                          stream: model.stream,
-                                          mic: model.mic,
-                                          debug: database.debug,
-                                          audio: database.audio)
-                    } label: {
-                        Label("Audio", systemImage: "waveform")
-                    }
-                    NavigationLink {
-                        MacrosSettingsView(model: model, database: database, macros: database.macros)
-                    } label: {
-                        Label("Macros", systemImage: "increase.indent")
-                    }
                 }
                 NavigationLink {
                     LocationSettingsView(
@@ -86,184 +51,15 @@ struct SettingsView: View {
             }
             Section {
                 NavigationLink {
-                    StoreSettingsView(model: model, store: model.store)
-                } label: {
-                    Label {
-                        Text("Store (support us) ❤️")
-                    } icon: {
-                        Image(systemName: "cart")
-                    }
-                }
-            }
-            Section {
-                if database.showAllSettings {
-                    NavigationLink {
-                        IngestsSettingsView(model: model, database: database)
-                    } label: {
-                        Label("Ingests", systemImage: "server.rack")
-                    }
-                    NavigationLink {
-                        TalkbackSettingsView(model: model,
-                                             mics: database.mics,
-                                             talkback: database.talkback)
-                    } label: {
-                        Label("Talkback", systemImage: "speaker.wave.2.bubble.left")
-                    }
-                }
-                NavigationLink {
-                    MoblinkSettingsView(status: model.statusOther, streamer: database.moblink.streamer)
-                } label: {
-                    Label("Moblink", systemImage: "app.connected.to.app.below.fill")
-                }
-                if database.showAllSettings {
-                    NavigationLink {
-                        MediaPlayersSettingsView(model: model, mediaPlayers: database.mediaPlayers)
-                    } label: {
-                        Label("Media players", systemImage: "play.rectangle.on.rectangle")
-                    }
-                    NavigationLink {
-                        AppleMusicSettingsView(model: model, musicPlaylist: model.musicPlaylist)
-                    } label: {
-                        Label("Apple Music", systemImage: "music.note")
-                    }
-                }
-            }
-            if database.showAllSettings {
-                Section {
-                    NavigationLink {
-                        GimbalSettingsView(model: model, gimbal: database.gimbal)
-                    } label: {
-                        Label("Gimbal", systemImage: "iphone.dock.motorized.viewfinder")
-                    }
-                    NavigationLink {
-                        SelfieStickSettingsView(model: model, selfieStick: database.selfieStick)
-                    } label: {
-                        Label("Selfie stick", systemImage: "line.diagonal")
-                    }
-                    NavigationLink {
-                        GameControllersSettingsView(model: model, database: database)
-                    } label: {
-                        Label("Game controllers", systemImage: "gamecontroller")
-                    }
-                    if #available(iOS 17.0, *) {
-                        NavigationLink {
-                            KeyboardSettingsView(model: model, keyboard: database.keyboard)
-                        } label: {
-                            Label("Keyboard", systemImage: "keyboard")
-                        }
-                    }
-                    #if !targetEnvironment(macCatalyst)
-                    if isPad() {
-                        NavigationLink {
-                            StreamDecksSettingsView(model: model,
-                                                    streamDeck: model.streamDeck,
-                                                    streamDecks: database.streamDecks)
-                        } label: {
-                            Label("Stream decks", systemImage: "square.grid.3x3.square")
-                        }
-                    }
-                    #endif
-                    NavigationLink {
-                        RemoteControlSettingsView(database: database, stream: $model.stream)
-                    } label: {
-                        Label("Remote control", systemImage: "appletvremote.gen1")
-                    }
-                }
-                Section {
-                    NavigationLink {
-                        DjiDevicesSettingsView(model: model, djiDevices: database.djiDevices)
-                    } label: {
-                        Label("DJI devices", systemImage: "appletvremote.gen1")
-                    }
-                    NavigationLink {
-                        GoProSettingsView()
-                    } label: {
-                        Label("GoPro", systemImage: "appletvremote.gen1")
-                    }
-                    NavigationLink {
-                        CatPrintersSettingsView(model: model, catPrinters: database.catPrinters)
-                    } label: {
-                        Label("Cat printers", systemImage: "pawprint")
-                    }
-                    NavigationLink {
-                        TeslaSettingsView(tesla: model.tesla)
-                    } label: {
-                        Label("Tesla", systemImage: "car.side")
-                    }
-                    NavigationLink {
-                        WorkoutDevicesSettingsView(model: model, workoutDevices: database.workoutDevices)
-                    } label: {
-                        Label("Workout devices", systemImage: "figure.walk.motion")
-                    }
-                    NavigationLink {
-                        BlackSharkCoolerDevicesSettingsView(model: model, blackSharkCoolerDevices: database
-                            .blackSharkCoolerDevices)
-                    } label: {
-                        Label("Black Shark coolers", systemImage: "fan")
-                    }
-                }
-            }
-            Section {
-                NavigationLink {
                     RecordingsSettingsView(model: model)
                 } label: {
                     Label("Recordings", systemImage: "photo.on.rectangle.angled")
                 }
-                if database.showAllSettings {
-                    NavigationLink {
-                        StreamingHistorySettingsView(model: model)
-                    } label: {
-                        Label("Streaming history", systemImage: "text.book.closed")
-                    }
-                }
-            }
-            if database.showAllSettings, isPhone() {
-                Section {
-                    NavigationLink {
-                        WatchSettingsView(model: model, watch: database.watch)
-                    } label: {
-                        Label("Apple Watch", systemImage: "applewatch")
-                    }
-                }
-            }
-            Section {
                 NavigationLink {
-                    HelpAndSupportSettingsView()
+                    DebugSettingsView(model: model, debug: database.debug)
                 } label: {
-                    Label("Help and support", systemImage: "questionmark.circle")
+                    Label("Debug", systemImage: "ladybug")
                 }
-                if database.showAllSettings {
-                    NavigationLink {
-                        AboutSettingsView()
-                    } label: {
-                        Label("About", systemImage: "info.circle")
-                    }
-                    NavigationLink {
-                        DebugSettingsView(model: model, debug: database.debug)
-                    } label: {
-                        Label("Debug", systemImage: "ladybug")
-                    }
-                }
-            }
-            if database.showAllSettings {
-                Section {
-                    NavigationLink {
-                        ImportExportSettingsView(model: model)
-                    } label: {
-                        Label("Import and export settings", systemImage: "gearshape")
-                    }
-                    NavigationLink {
-                        DeepLinkCreatorSettingsView(deepLinkCreator: database.deepLinkCreator)
-                    } label: {
-                        Label("Deep link creator", systemImage: "link.badge.plus")
-                    }
-                }
-            }
-            Section {
-                if database.showAllSettings, !isMac() {
-                    AppModeView(database: database)
-                }
-                Toggle("Show all settings", isOn: $database.showAllSettings)
             }
             Section {
                 SettingsSaveView(model: model)

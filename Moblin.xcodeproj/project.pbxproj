@@ -1116,8 +1116,8 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Moblin can show your heart rate on stream.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Moblin can show your heart rate on stream.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Moblin uses localhost as input and output to SRT library.";
-				INFOPLIST_KEY_NSLocationUsageDescription = "Moblin can display your location and/or speed on screen and stream.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Moblin can display your location and/or speed on screen and stream.";
+				INFOPLIST_KEY_NSLocationUsageDescription = "Days saves your location next to your recordings.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Days saves your location next to your recordings.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Moblin live streams audio from the microphone.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Moblin shows selected images as overlays.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Moblin shows selected images as overlays.";
@@ -1185,8 +1185,8 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Moblin can show your heart rate on stream.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Moblin can show your heart rate on stream.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Moblin uses localhost as input and output to SRT library.";
-				INFOPLIST_KEY_NSLocationUsageDescription = "Moblin can display your location and/or speed on screen and stream.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Moblin can display your location and/or speed on screen and stream.";
+				INFOPLIST_KEY_NSLocationUsageDescription = "Days saves your location next to your recordings.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Days saves your location next to your recordings.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Moblin live streams audio from the microphone.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Moblin shows selected images as overlays.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Moblin shows selected images as overlays.";
