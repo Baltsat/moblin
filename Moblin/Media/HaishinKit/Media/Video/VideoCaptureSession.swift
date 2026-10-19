@@ -595,9 +595,12 @@ final class VideoCaptureSession: NSObject, @unchecked Sendable {
             return .notFound("No unbinned video format found")
         }
         let formatColorRange = isExternalCameraVideoRange(device, colorRange) ? .full : colorRange
-        guard let format = filterFormatsByColorRange(formats, formatColorRange).first else {
+        guard let format = filterFormatsByColorRange(formats, formatColorRange)
+            .max(by: { $0.videoFieldOfView < $1.videoFieldOfView })
+        else {
             return .notFound("Unsupported pixel format")
         }
+        logger.info("days: format \(format.formatDescription.dimensions.width)x\(format.formatDescription.dimensions.height) fov \(format.videoFieldOfView)")
         return .found(format: format,
                       useAutoFrameRate: useAutoFrameRate,
                       useLandscapeInPortrait: useLandscapeInPortrait)
