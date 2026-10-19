@@ -2781,6 +2781,7 @@ final class Model: NSObject, ObservableObject {
             sendThermalStateToWatch(thermalState: state)
         }
         logger.info("Thermal state: \(state.string())")
+        daysThermalChanged()
         if statusOther.thermalState == .critical {
             makeFlameRedToast()
         }

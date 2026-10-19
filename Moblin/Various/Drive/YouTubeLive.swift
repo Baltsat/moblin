@@ -243,9 +243,20 @@ private func daysPathChanged() {
     }
 }
 
+@MainActor private var youTubeThermalPaused = false
+
 extension Model {
+    func youTubeThermalChanged(_ state: ProcessInfo.ThermalState) {
+        if state == .critical {
+            youTubeThermalPaused = true
+        } else if state.rawValue <= ProcessInfo.ThermalState.fair.rawValue {
+            youTubeThermalPaused = false
+        }
+        youTubeNetworkSettled()
+    }
+
     fileprivate func youTubeNetworkSettled() {
-        let can = DaysNet.shared.canStream(cellular: youTubeCellularAllowed())
+        let can = DaysNet.shared.canStream(cellular: youTubeCellularAllowed()) && !youTubeThermalPaused
         if isRecording {
             if let session = youTubeSession {
                 if !can, youTubeStreaming {
@@ -307,7 +318,7 @@ extension Model {
             return
         }
         let cellular = youTubeCellularAllowed()
-        guard DaysNet.shared.canStream(cellular: cellular) else {
+        guard DaysNet.shared.canStream(cellular: cellular), !youTubeThermalPaused else {
             return
         }
         let title = "\(youTubeTitleFormatter.string(from: Date())) \u{00B7} phone"

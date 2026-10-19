@@ -170,6 +170,26 @@ private struct DaysStatusSection: View {
             } label: {
                 Label("YouTube live", systemImage: "dot.radiowaves.left.and.right")
             }
+            LabeledContent {
+                let free = (try? URL(fileURLWithPath: NSHomeDirectory())
+                    .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+                    .volumeAvailableCapacityForImportantUsage) ?? 0
+                Text(UInt64(max(free, 0)).formatBytes())
+            } label: {
+                Label("Free storage", systemImage: "internaldrive")
+            }
+            LabeledContent {
+                let level = model.battery.level
+                Text((level >= 0 ? "\(Int(level * 100))%" : "–")
+                    + (model.battery.state == .charging || model.battery.state == .full ? ", charging" : ""))
+            } label: {
+                Label("Battery", systemImage: "battery.100")
+            }
+            LabeledContent {
+                Text(model.statusOther.thermalState.string())
+            } label: {
+                Label("Temperature", systemImage: "thermometer.medium")
+            }
             if !drive.text.isEmpty {
                 Text(drive.text)
                     .font(.footnote)
@@ -183,6 +203,8 @@ private struct DaysRecordingSection: View {
     let model: Model
     @ObservedObject var database: Database
     @ObservedObject var stream: SettingsStream
+    @ObservedObject var recording: SettingsStreamRecording
+    @State private var preset = DaysPreset.current
     @AppStorage(DaysPrefs.torchDefault) private var torchDefault = false
     @AppStorage(DaysPrefs.dimDelay) private var dimDelay = 15
     @AppStorage(DaysPrefs.autoStart) private var autoStart = false
@@ -192,7 +214,17 @@ private struct DaysRecordingSection: View {
     }
 
     var body: some View {
-        Section("Recording") {
+        Section {
+            Picker(selection: Binding(get: { preset }, set: {
+                preset = $0
+                model.choosePreset($0)
+            })) {
+                ForEach(DaysPreset.allCases, id: \.self) {
+                    Text($0.title).tag($0)
+                }
+            } label: {
+                Label("Quality", systemImage: "sparkles.tv")
+            }
             Picker(selection: $stream.resolution) {
                 ForEach(daysResolutions, id: \.self) {
                     Text($0.shortString())
@@ -244,7 +276,24 @@ private struct DaysRecordingSection: View {
             Toggle(isOn: $autoStart) {
                 Label("Start recording on launch", systemImage: "record.circle")
             }
+        } header: {
+            Text("Recording")
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(effectiveLine)
+                if preset == .max {
+                    Text("Short scenes. Runs hot. ~13 GB/hour.")
+                }
+            }
         }
+    }
+
+    private var effectiveLine: String {
+        let codec = recording.videoCodec == .h264avc ? "H.264" : "HEVC"
+        let mbps = Double(recording.videoBitrate) / 1_000_000
+        let gb = (Double(recording.videoBitrate) + Double(recording.audioBitrate)) / 8 * 3600 / 1e9
+        return String(format: "%@ · %@ %.0f Mbps · ~%.1f GB/hour",
+                      "\(stream.resolution.shortString())\(stream.fps)", codec, mbps, gb)
     }
 }
 
@@ -288,6 +337,9 @@ private struct DaysUploadSection: View {
             Text("""
             Recordings upload to Drive first. The local file is deleted once Drive and, when connected, \
             the GitHub archive have both finished.
+
+            Charger tips: Low Power Mode is fine. Use a wired charger, not MagSafe or wireless; it heats. \
+            Take the case off. Keep the phone out of the sun.
             """)
         }
     }
@@ -412,7 +464,7 @@ private struct DaysQueueSection: View {
                 .padding(.vertical, 2)
             }
             if queue.items.isEmpty {
-                Text("No recordings yet")
+                Text("Nothing in the queue")
                     .foregroundStyle(.secondary)
             }
             Button {
@@ -466,8 +518,10 @@ struct DaysSettingsView: View {
 
     var body: some View {
         Form {
-            TimelineView(.periodic(from: .now, by: 2)) { _ in
-                DaysNowRecordingSection(model: model, queue: daysQueue)
+            if model.isRecording {
+                TimelineView(.periodic(from: .now, by: 2)) { _ in
+                    DaysNowRecordingSection(model: model, queue: daysQueue)
+                }
             }
             DaysQueueSection(queue: daysQueue)
             DaysAccountsSection(drive: driveStatus, github: githubStatus, model: model)
@@ -478,7 +532,8 @@ struct DaysSettingsView: View {
                                   drive: driveStatus,
                                   overlay: model.streamOverlay)
             }
-            DaysRecordingSection(model: model, database: database, stream: model.stream)
+            DaysRecordingSection(model: model, database: database, stream: model.stream,
+                                 recording: model.stream.recording)
             TimelineView(.periodic(from: .now, by: 2)) { _ in
                 DaysEffectiveSection(stream: model.stream, database: database)
             }

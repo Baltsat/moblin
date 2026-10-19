@@ -11,6 +11,7 @@ extension Model {
         guard !isChatPhone() else {
             return
         }
+        applyDaysPendingPreset()
         setIsRecording(value: true)
         startDriveSessionIfNeeded()
         if !resumeRecording() {

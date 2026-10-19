@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import SwiftUI
 
 private let daysQuickButtons: Set<SettingsQuickButtonType> = [
     .record, .mute, .torch, .blackScreen, .lockScreen, .live,
@@ -26,6 +27,118 @@ extension Model {
             UserDefaults.standard.set(true, forKey: lowLightKey)
         }
         applyDaysCaptureMigration()
+        applyDaysPendingPreset()
+    }
+
+    func applyDaysPendingPreset() {
+        guard DaysPreset.pending else {
+            return
+        }
+        DaysPreset.pending = false
+        daysApplyPreset(DaysPreset.current)
+    }
+
+    func daysApplyPreset(_ preset: DaysPreset, reload: Bool = true) {
+        let values = preset.values
+        for stream in database.streams {
+            stream.resolution = values.resolution
+            stream.fps = values.fps
+            stream.codec = .h264avc
+            stream.bitrate = values.streamBitrate
+            stream.maxKeyFrameInterval = 2
+            stream.audioCodec = .aac
+            stream.audioBitrate = 128_000
+            stream.recording.overrideStream = false
+            stream.recording.videoCodec = values.recordingCodec
+            stream.recording.videoBitrate = values.recordingBitrate
+            stream.recording.maxKeyFrameInterval = 2
+            stream.recording.audioBitrate = 128_000
+        }
+        database.videoStabilizationMode = .standard
+        database.audio.preferStereoMic = true
+        if reload, !isRecording, !isLive {
+            reloadStreamIfEnabled(stream: stream)
+            attachCamera()
+        }
+    }
+
+    func choosePreset(_ preset: DaysPreset) {
+        DaysPreset.set(preset)
+        if isRecording || isLive {
+            DaysPreset.pending = true
+        } else {
+            daysApplyPreset(preset)
+        }
+    }
+
+    func daysThermalChanged() {
+        let state = statusOther.thermalState
+        let hot = state.rawValue >= ProcessInfo.ThermalState.serious.rawValue
+        if hot, !daysThermalReduced {
+            daysThermalReduced = true
+            media.setVideoStreamBitrate(bitrate: UInt32(Double(stream.bitrate) * 0.7))
+        } else if !hot, daysThermalReduced {
+            daysThermalReduced = false
+            media.setVideoStreamBitrate(bitrate: stream.bitrate)
+        }
+        if hot {
+            disableScreenPreview()
+        } else if !daysDim.dimmed {
+            maybeEnableScreenPreview()
+        }
+        youTubeThermalChanged(state)
+    }
+}
+
+@MainActor private var daysThermalReduced = false
+
+enum DaysPreset: String, CaseIterable {
+    case allDay, smooth, max
+
+    struct Values {
+        let resolution: SettingsStreamResolution
+        let fps: Int
+        let streamBitrate: UInt32
+        let recordingCodec: SettingsStreamCodec
+        let recordingBitrate: UInt32
+    }
+
+    var values: Values {
+        switch self {
+        case .allDay:
+            Values(resolution: .r1920x1080, fps: 30, streamBitrate: 6_000_000,
+                   recordingCodec: .h264avc, recordingBitrate: 6_000_000)
+        case .smooth:
+            Values(resolution: .r1920x1080, fps: 60, streamBitrate: 8_000_000,
+                   recordingCodec: .h264avc, recordingBitrate: 8_000_000)
+        case .max:
+            Values(resolution: .r3840x2160, fps: 30, streamBitrate: 35_000_000,
+                   recordingCodec: .h265hevc, recordingBitrate: 30_000_000)
+        }
+    }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .allDay: "All-day"
+        case .smooth: "Smooth"
+        case .max: "Max quality"
+        }
+    }
+
+    private static let key = "daysPreset"
+    private static let pendingKey = "daysPresetPending"
+
+    static var current: DaysPreset {
+        DaysPreset(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .allDay
+    }
+
+    static func set(_ preset: DaysPreset) {
+        UserDefaults.standard.set(preset.rawValue, forKey: key)
+    }
+
+    static var pending: Bool {
+        get { UserDefaults.standard.bool(forKey: pendingKey) }
+        set { UserDefaults.standard.set(newValue, forKey: pendingKey) }
     }
 }
 
@@ -74,7 +187,7 @@ final class DaysCaptureInfo: @unchecked Sendable {
 
 extension Model {
     fileprivate func applyDaysCaptureMigration() {
-        let key = "daysCaptureMigration3"
+        let key = "daysCaptureMigration4"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return
         }
@@ -88,22 +201,8 @@ extension Model {
                 scene.videoSource.backCameraId = wide
             }
         }
-        for stream in database.streams {
-            stream.resolution = .r1920x1080
-            stream.fps = 60
-            stream.codec = .h264avc
-            stream.bitrate = 8_000_000
-            stream.maxKeyFrameInterval = 2
-            stream.audioCodec = .aac
-            stream.audioBitrate = 128_000
-            stream.recording.overrideStream = false
-            stream.recording.videoCodec = .h264avc
-            stream.recording.videoBitrate = 8_000_000
-            stream.recording.maxKeyFrameInterval = 2
-            stream.recording.audioBitrate = 128_000
-        }
-        database.videoStabilizationMode = .standard
-        database.audio.preferStereoMic = true
+        DaysPreset.set(.allDay)
+        daysApplyPreset(.allDay, reload: false)
         UserDefaults.standard.set(true, forKey: key)
     }
 }

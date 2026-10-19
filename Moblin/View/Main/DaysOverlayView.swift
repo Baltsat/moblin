@@ -75,7 +75,10 @@ struct DaysPillView: View {
                     .font(.subheadline)
                 Text("\(Int(battery.level * 100))%").font(.caption).monospacedDigit()
                 if status.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue {
-                    Image(systemName: "thermometer.high").foregroundStyle(.orange)
+                    Image(systemName: "thermometer.high")
+                        .foregroundStyle(status.thermalState == .critical ? .red : .orange)
+                    Text(status.thermalState == .critical ? "Critical" : "Hot")
+                        .font(.caption)
                 }
             }
         }
@@ -464,6 +467,13 @@ struct DaysDimView: View {
                     .gesture(DragGesture(minimumDistance: 0).onEnded { _ in
                         dim.wake()
                     })
+            }
+        }
+        .onChange(of: dim.dimmed) { dimmed in
+            if dimmed {
+                model.disableScreenPreview()
+            } else if model.statusOther.thermalState.rawValue < ProcessInfo.ThermalState.serious.rawValue {
+                model.maybeEnableScreenPreview()
             }
         }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
