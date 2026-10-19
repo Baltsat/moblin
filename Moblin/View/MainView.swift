@@ -535,14 +535,10 @@ struct MainView: View {
         VStack(spacing: 0) {
             ZStack {
                 streamViewWithWidgets()
-                GeometryReader { metrics in
-                    StreamOverlayView(streamOverlay: model.streamOverlay,
-                                      chatSettings: model.database.chat,
-                                      orientation: orientation,
-                                      width: metrics.size.width)
-                        .padding(.bottom, orientation.isPortrait ? 5 : 0)
-                        .opacity(model.showLocalOverlays ? 1 : 0)
-                }
+                DaysOverlayView(orientation: orientation,
+                                recording: model.recording,
+                                drive: driveStatus,
+                                isRecording: model.isRecording)
                 if model.showDrawOnStream, model.stream.portrait {
                     DrawOnStreamView(model: model)
                 }
@@ -584,7 +580,6 @@ struct MainView: View {
                         model.commitZoomX(amount: Float(amount))
                     }
             )
-            ControlBarPortraitView(model: model, quickButtons: quickButtons)
         }
     }
 
@@ -592,13 +587,10 @@ struct MainView: View {
         HStack(spacing: 0) {
             ZStack {
                 streamViewWithWidgets()
-                GeometryReader { metrics in
-                    StreamOverlayView(streamOverlay: model.streamOverlay,
-                                      chatSettings: model.database.chat,
-                                      orientation: orientation,
-                                      width: metrics.size.width)
-                        .opacity(model.showLocalOverlays ? 1 : 0)
-                }
+                DaysOverlayView(orientation: orientation,
+                                recording: model.recording,
+                                drive: driveStatus,
+                                isRecording: model.isRecording)
                 if model.showDrawOnStream {
                     DrawOnStreamView(model: model)
                 }
@@ -649,23 +641,12 @@ struct MainView: View {
                 }
                 .frame(width: model.panelHidden ? 1 : settingsHalfWidth)
             }
-            ControlBarLandscapeView(model: model, quickButtons: quickButtons)
         }
     }
 
     private func edgesToIgnore() -> Edge.Set {
         if isPhone() {
-            if orientation.isPortrait {
-                if quickButtons.bigButtons, quickButtons.twoColumns {
-                    [.bottom]
-                } else {
-                    []
-                }
-            } else if quickButtons.bigButtons, quickButtons.twoColumns {
-                [.top, .trailing]
-            } else {
-                [.top]
-            }
+            .all
         } else {
             []
         }
