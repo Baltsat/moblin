@@ -400,6 +400,39 @@ final class DaysDim: ObservableObject {
 @MainActor
 let daysDim = DaysDim()
 
+private final class DaysTouchObserver: UIGestureRecognizer {
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        MainActor.assumeIsolated { daysDim.touch() }
+        state = .failed
+    }
+}
+
+private final class DaysTouchDelegate: NSObject, UIGestureRecognizerDelegate {
+    func gestureRecognizer(_: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer) -> Bool
+    {
+        true
+    }
+}
+
+@MainActor private let daysTouchDelegate = DaysTouchDelegate()
+
+@MainActor
+func daysInstallTouchObserver() {
+    for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+        for window in scene.windows
+            where !(window.gestureRecognizers ?? []).contains(where: { $0 is DaysTouchObserver })
+        {
+            let observer = DaysTouchObserver(target: nil, action: nil)
+            observer.cancelsTouchesInView = false
+            observer.delaysTouchesBegan = false
+            observer.delaysTouchesEnded = false
+            observer.delegate = daysTouchDelegate
+            window.addGestureRecognizer(observer)
+        }
+    }
+}
+
 struct DaysDimView: View {
     @EnvironmentObject var model: Model
     @ObservedObject var dim: DaysDim

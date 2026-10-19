@@ -108,14 +108,12 @@ private struct PanelButtonsView: View {
             VStack(alignment: .trailing) {
                 if #available(iOS 26, *) {
                     HStack(spacing: 0) {
-                        HideShowButtonPanelView()
                         DoneButtonView {
                             onClose()
                         }
                     }
                 } else {
                     HStack(spacing: 0) {
-                        HideShowButtonPanelView()
                         DoneButtonView {
                             onClose()
                         }
@@ -689,11 +687,9 @@ struct MainView: View {
                 SnapshotCountdownView(snapshot: model.snapshot)
                 InstantReplayCountdownView(replay: model.replay)
             }
-            .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in
-                daysDim.touch()
-            })
             .onAppear {
                 model.setup()
+                DispatchQueue.main.async { daysInstallTouchObserver() }
             }
             .sheet(isPresented: $model.showTwitchAuth) {
                 TwitchLoginView(model: model, presenting: $model.showTwitchAuth)
