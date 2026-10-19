@@ -138,7 +138,9 @@ extension Model {
             obsStopRecording()
         }
         stopNetStream()
-        makeStreamEndedToast()
+        if !daysQuietStop {
+            makeStreamEndedToast()
+        }
         streamState = .disconnected
         if let streamingHistoryStream {
             streamingHistoryStream.stopTime = Date()

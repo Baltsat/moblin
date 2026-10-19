@@ -74,6 +74,35 @@ private func youTubePrepare(title: String, cellular: Bool) async throws -> (url:
     guard let stream, let streamId = stream["id"] as? String, let url = youTubeIngestUrl(stream) else {
         throw YouTubeError.failed("no stream")
     }
+    let old = try? await youTubeRequest(method: "GET",
+                                        path: "liveBroadcasts",
+                                        query: ["part": "id,status,contentDetails", "mine": "true", "maxResults": "50"],
+                                        body: nil,
+                                        token: token,
+                                        cellular: cellular)
+    for item in old?["items"] as? [[String: Any]] ?? [] {
+        guard let id = item["id"] as? String,
+              (item["contentDetails"] as? [String: Any])?["boundStreamId"] as? String == streamId,
+              let status = (item["status"] as? [String: Any])?["lifeCycleStatus"] as? String
+        else {
+            continue
+        }
+        if status == "live" || status == "testing" {
+            _ = try? await youTubeRequest(method: "POST",
+                                          path: "liveBroadcasts/transition",
+                                          query: ["part": "status", "id": id, "broadcastStatus": "complete"],
+                                          body: nil,
+                                          token: token,
+                                          cellular: cellular)
+        } else if status == "ready" || status == "created" {
+            _ = try? await youTubeRequest(method: "DELETE",
+                                          path: "liveBroadcasts",
+                                          query: ["id": id],
+                                          body: nil,
+                                          token: token,
+                                          cellular: cellular)
+        }
+    }
     let start = ISO8601DateFormatter().string(from: Date())
     let broadcast = try await youTubeRequest(
         method: "POST",
@@ -244,6 +273,7 @@ private func daysPathChanged() {
 }
 
 @MainActor private var youTubeThermalPaused = false
+@MainActor var daysQuietStop = false
 
 extension Model {
     func youTubeThermalChanged(_ state: ProcessInfo.ThermalState) {
@@ -261,14 +291,12 @@ extension Model {
             if let session = youTubeSession {
                 if !can, youTubeStreaming {
                     youTubeStreaming = false
+                    daysQuietStop = true
                     _ = stopStream()
+                    daysQuietStop = false
                 } else if can, !youTubeStreaming, !isLive {
                     stream.url = session.url
                     youTubeStreaming = true
-                    startStream()
-                } else if can, youTubeStreaming, !isStreamConnected() {
-                    _ = stopStream()
-                    stream.url = session.url
                     startStream()
                 }
             } else if can {
@@ -313,7 +341,8 @@ extension Model {
         _ = daysPathObserverRegistered
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: youTubeEnabledKey) as? Bool ?? true,
-              driveAuth.isSignedIn, driveAuth.hasScope(youTubeScope), !isLive, youTubeSession == nil
+              driveAuth.isSignedIn, driveAuth.hasScope(youTubeScope), !isLive, youTubeSession == nil,
+              youTubeTask == nil
         else {
             return
         }
@@ -334,6 +363,7 @@ extension Model {
                 }
             }
             guard let prepared else {
+                youTubeTask = nil
                 return
             }
             guard !Task.isCancelled, let self, isRecording, !isLive else {
@@ -355,7 +385,9 @@ extension Model {
         youTubeSession = nil
         if youTubeStreaming {
             youTubeStreaming = false
+            daysQuietStop = true
             _ = stopStream()
+            daysQuietStop = false
         }
         if let session {
             Task {

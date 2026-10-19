@@ -390,6 +390,7 @@ final class Recorder: NSObject, @unchecked Sendable {
         if writer.inputs.count == 2 {
             writer.startWriting()
             writer.startSession(atSourceTime: .zero)
+            daysRecorderWriting = true
         }
         return writerInput
     }
@@ -520,6 +521,7 @@ final class Recorder: NSObject, @unchecked Sendable {
     }
 
     private func reset() {
+        daysRecorderWriting = false
         writer = nil
         audioWriterInput = nil
         videoWriterInput = nil
@@ -537,6 +539,8 @@ final class Recorder: NSObject, @unchecked Sendable {
         writer.inputs.count == 2
     }
 }
+
+nonisolated(unsafe) var daysRecorderWriting = false
 
 extension Recorder: AVAssetWriterDelegate {
     func assetWriter(_: AVAssetWriter,

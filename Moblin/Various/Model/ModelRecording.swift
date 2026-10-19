@@ -86,6 +86,23 @@ extension Model {
             audioBitrate: audioBitrate != 0 ? audioBitrate : nil,
             hdr: database.color.space == .hlgBt2020
         )
+        daysWatchRecorder(attempt: 1)
+    }
+
+    private func daysWatchRecorder(attempt: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            guard self.isRecording, self.isRecorderRecording, !daysRecorderWriting else {
+                return
+            }
+            logger.info("recorder: not writing after 4 s, reloading audio (attempt \(attempt))")
+            self.reloadAudioSession()
+            if attempt >= 2 {
+                self.stopRecorderIfNeeded(forceStop: true)
+                _ = self.resumeRecording()
+            } else {
+                self.daysWatchRecorder(attempt: attempt + 1)
+            }
+        }
     }
 
     func stopRecorderIfNeeded(forceStop: Bool = false) {
