@@ -110,6 +110,7 @@ final class DriveStatus: ObservableObject {
     @Published var signedIn = driveAuth.isSignedIn
     @Published var hasYouTube = driveAuth.hasScope(youTubeScope)
     @Published var text = ""
+    @Published var percent: Int?
     @Published var email = UserDefaults.standard.string(forKey: "daysGoogleEmail") ?? ""
 
     func refreshEmail() async {

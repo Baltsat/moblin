@@ -349,6 +349,46 @@ private func daysMb(_ bytes: Int64) -> String {
     String(format: "%.0f", Double(bytes) / 1_048_576)
 }
 
+private func daysEta(_ seconds: Double) -> String {
+    let total = Int(seconds)
+    if total >= 3600 {
+        return String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
+    }
+    return String(format: "%d:%02d", total / 60, total % 60)
+}
+
+private struct DaysDriveProgress: View {
+    let item: DaysQueueItem
+    @ObservedObject var queue: DaysQueue
+
+    var body: some View {
+        if !item.driveDone, item.driveTotal > 0 {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let live = queue.live[item.name]
+                let sent = max(live?.sent ?? 0, item.driveAcked)
+                let fresh = live.map { context.date.timeIntervalSince($0.at) < 4 } ?? false
+                let speed = fresh ? (live?.speed ?? 0) : 0
+                let remaining = Double(max(item.driveTotal - sent, 0))
+                VStack(alignment: .leading, spacing: 2) {
+                    ProgressView(value: Double(min(sent, item.driveTotal)), total: Double(item.driveTotal))
+                    HStack {
+                        Text("\(daysMb(sent)) / \(daysMb(item.driveTotal)) MB")
+                        Spacer()
+                        if speed > 0 {
+                            Text(String(format: "%.1f MB/s", speed / 1_048_576))
+                            Text("ETA \(daysEta(remaining / speed))")
+                        } else {
+                            Text("waiting")
+                        }
+                    }
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
 private struct DaysLinkRow: View {
     let title: LocalizedStringKey
     let icon: String
@@ -411,6 +451,7 @@ private struct DaysNowRecordingSection: View {
                                 icon: "externaldrive",
                                 detail: daysDriveDetail(item),
                                 url: fileUrl)
+                    DaysDriveProgress(item: item, queue: queue)
                     if item.githubQueued {
                         DaysLinkRow(title: "GitHub",
                                     icon: "archivebox",
@@ -448,6 +489,7 @@ private struct DaysQueueSection: View {
                                 detail: daysDriveDetail(item),
                                 url: item.driveFileId.flatMap { daysDriveFileUrl($0) }
                                     ?? queue.folderUrl(item))
+                    DaysDriveProgress(item: item, queue: queue)
                     if item.githubQueued {
                         DaysLinkRow(title: "GitHub",
                                     icon: "archivebox",

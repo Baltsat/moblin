@@ -265,6 +265,7 @@ extension Model {
     func selectMicDefault(mic: SettingsMicsMic) {
         media.attachBufferedAudio(cameraId: nil)
         let preferStereoMic = database.audio.preferStereoMic
+        let stereoOrientation = currentStereoOrientation()
         processorControlQueue.async {
             let session = AVAudioSession.sharedInstance()
             guard let inputPort = session.availableInputs?.first(where: { $0.uid == mic.inputUid }) else {
@@ -278,9 +279,40 @@ extension Model {
             }
             try? setBuiltInMicAudioMode(dataSource: dataSource, preferStereoMic: preferStereoMic)
             try? session.setInputDataSource(dataSource)
+            if preferStereoMic, let stereoOrientation {
+                try? session.setPreferredInputOrientation(stereoOrientation)
+            }
+            let patterns = dataSource.supportedPolarPatterns?.map(\.rawValue) ?? []
+            let selected = dataSource.selectedPolarPattern?.rawValue ?? "none"
+            logger.info("audio: mic \(dataSource.dataSourceName) patterns \(patterns) selected \(selected)")
         }
         media.attachDefaultAudioDevice(builtinDelay: database.debug.builtinAudioAndVideoDelay)
         remoteControlStateChanged(state: RemoteControlAssistantStreamerState(mic: mic.id))
+    }
+
+    func currentStereoOrientation() -> AVAudioSession.StereoOrientation? {
+        if stream.portrait {
+            return .portrait
+        }
+        switch UIDevice.current.orientation {
+        case .landscapeLeft:
+            return .landscapeRight
+        case .landscapeRight:
+            return .landscapeLeft
+        case .portrait:
+            return .portrait
+        default:
+            return nil
+        }
+    }
+
+    func updateStereoOrientation() {
+        guard database.audio.preferStereoMic, let orientation = currentStereoOrientation() else {
+            return
+        }
+        processorControlQueue.async {
+            try? AVAudioSession.sharedInstance().setPreferredInputOrientation(orientation)
+        }
     }
 
     func keepSpeakerAlive(now: ContinuousClock.Instant) {
@@ -292,6 +324,7 @@ extension Model {
         let newNumberOfAudioChannels = media.getNumberOfAudioChannels()
         let newSampleRate = media.getAudioSampleRate()
         if newNumberOfAudioChannels != audio.numberOfChannels {
+            logger.info("audio: channels \(audio.numberOfChannels) -> \(newNumberOfAudioChannels)")
             audio.numberOfChannels = newNumberOfAudioChannels
         }
         if newSampleRate != audio.sampleRate {

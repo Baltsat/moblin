@@ -25,6 +25,12 @@ struct DaysQueueItem: Codable, Identifiable, Sendable {
     }
 }
 
+struct DaysLive {
+    var sent: Int64
+    var speed: Double
+    var at: Date
+}
+
 let daysDefaultRootFolderId = "1AXpuUcq_s9MmOuS1WVFtSYS-ImNcAThb"
 private let daysQueueKey = "daysQueueItems"
 private let daysRootFolderKey = "daysDriveRootFolderId"
@@ -34,6 +40,7 @@ let daysPlaylistKey = "daysYouTubePlaylistId"
 @MainActor
 final class DaysQueue: ObservableObject {
     @Published var items: [DaysQueueItem] = []
+    @Published var live: [String: DaysLive] = [:]
     private var pendingYouTube: (id: String, at: Date)?
 
     init() {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-private func daysUploadText(_ status: String, signedIn: Bool) -> String? {
+private func daysUploadText(_ status: String, signedIn: Bool, percent: Int?) -> String? {
     let text = status.lowercased()
     if text.isEmpty {
         return signedIn ? "Synced" : nil
@@ -9,6 +9,9 @@ private func daysUploadText(_ status: String, signedIn: Bool) -> String? {
     } else if text.contains("waiting for network") {
         return "Waiting for Wi-Fi"
     } else if text.contains("queued") {
+        if let percent {
+            return "\u{2191} \(percent)%"
+        }
         let size = status.replacingOccurrences(of: "Google Drive: ", with: "")
             .replacingOccurrences(of: "recording, ", with: "")
             .replacingOccurrences(of: " queued", with: "")
@@ -52,7 +55,7 @@ struct DaysPillView: View {
     }
 
     var statusPill: some View {
-        let upload = daysUploadText(drive.text, signedIn: drive.signedIn)
+        let upload = daysUploadText(drive.text, signedIn: drive.signedIn, percent: drive.percent)
         return HStack(spacing: 8) {
             if isRecording {
                 Circle().fill(.red).frame(width: 8, height: 8)

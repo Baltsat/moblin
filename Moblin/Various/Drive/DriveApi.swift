@@ -7,6 +7,20 @@ enum DriveChunkResult {
     case complete(fileId: String)
 }
 
+private final class DriveProgressDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let handler: @Sendable (Int64) -> Void
+
+    init(_ handler: @escaping @Sendable (Int64) -> Void) {
+        self.handler = handler
+    }
+
+    func urlSession(_: URLSession, task _: URLSessionTask, didSendBodyData _: Int64,
+                    totalBytesSent: Int64, totalBytesExpectedToSend _: Int64)
+    {
+        handler(totalBytesSent)
+    }
+}
+
 private struct DriveFile: Decodable {
     let id: String
 }
@@ -16,19 +30,20 @@ private struct DriveFileList: Decodable {
 }
 
 final class DriveApi: Sendable {
-    private let wifiSession = daysSession(allowCellular: false, resource: 900)
-    private let anySession = daysSession(allowCellular: true, resource: 900)
+    private let wifiSession = daysSession(allowCellular: false, resource: 1800)
+    private let anySession = daysSession(allowCellular: true, resource: 1800)
 
     private var session: URLSession {
         DaysPrefs.isWifiOnly ? wifiSession : anySession
     }
 
-    private func send(_ request: URLRequest, body: Data?) async throws -> (HTTPURLResponse, Data) {
+    private func send(_ request: URLRequest, body: Data?,
+                      progress: (@Sendable (Int64) -> Void)? = nil) async throws -> (HTTPURLResponse, Data) {
         var request = request
         request.setValue("Bearer \(try await driveAuth.accessToken())", forHTTPHeaderField: "Authorization")
         do {
             let (data, response) = if let body {
-                try await session.upload(for: request, from: body)
+                try await session.upload(for: request, from: body, delegate: progress.map { DriveProgressDelegate($0) })
             } else {
                 try await session.data(for: request)
             }
@@ -120,7 +135,8 @@ final class DriveApi: Sendable {
     func putChunk(uploadUrl: String,
                   data: Data,
                   offset: Int64,
-                  total: Int64?) async throws -> DriveChunkResult
+                  total: Int64?,
+                  progress: (@Sendable (Int64) -> Void)? = nil) async throws -> DriveChunkResult
     {
         guard let url = URL(string: uploadUrl) else {
             throw DriveError.sessionGone
@@ -134,7 +150,7 @@ final class DriveApi: Sendable {
             let last = offset + Int64(data.count) - 1
             request.setValue("bytes \(offset)-\(last)/\(totalString)", forHTTPHeaderField: "Content-Range")
         }
-        let (response, responseData) = try await send(request, body: data)
+        let (response, responseData) = try await send(request, body: data, progress: progress)
         return try parseChunkResponse(response, responseData)
     }
 

@@ -2,6 +2,41 @@ import Foundation
 import Network
 
 private let drivePartSize = 8 * 1024 * 1024
+private let driveChunkParts = 4
+
+final class DriveMeter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lastAt = Date.distantPast
+    private var lastSent: Int64 = 0
+    private var speed = 0.0
+
+    func report(name: String, sent: Int64, total: Int64) {
+        let now = Date()
+        lock.lock()
+        let dt = now.timeIntervalSince(lastAt)
+        guard dt >= 0.5 || sent >= total else {
+            lock.unlock()
+            return
+        }
+        if dt < 5 {
+            let instant = max(Double(sent - lastSent) / dt, 0)
+            speed = speed == 0 ? instant : 0.7 * speed + 0.3 * instant
+        } else {
+            speed = 0
+        }
+        lastAt = now
+        lastSent = sent
+        let currentSpeed = speed
+        lock.unlock()
+        let percent = total > 0 ? min(Int(sent * 100 / total), 100) : 0
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                daysQueue.live[name] = DaysLive(sent: sent, speed: currentSpeed, at: now)
+                driveStatus.percent = percent
+            }
+        }
+    }
+}
 private let driveRootFolderName = "Days"
 private let drivePhoneFolderName = "phone"
 private let driveMimeType = "video/mp4"
@@ -107,6 +142,7 @@ private struct DriveManifest: Codable {
     var sidecarSyncedClosed = false
     var done = false
     var failed = false
+    var githubHanded: Bool?
 }
 
 private final class DriveSession {
@@ -192,6 +228,7 @@ private actor DriveEngine {
     private var sessions: [String: DriveSession] = [:]
     private var failures = 0
     private var folderIds: [String: String] = [:]
+    private var meters: [String: DriveMeter] = [:]
     private let wakeStream: AsyncStream<Void>
     private let wakeContinuation: AsyncStream<Void>.Continuation
 
@@ -301,8 +338,28 @@ private actor DriveEngine {
         session.manifest.bytesTotal = Int64(session.tailIndex * drivePartSize + session.buffer.count)
         session.save()
         current = nil
+        handToGitHub(session)
         wake()
         updateStatus()
+    }
+
+    private func handToGitHub(_ session: DriveSession) {
+        guard githubAuth.isSignedIn, DaysPrefs.isGitHubArchive,
+              session.manifest.githubHanded != true,
+              let localPath = session.manifest.info.localPath,
+              let sidecar = try? sidecarData(session)
+        else {
+            return
+        }
+        session.manifest.githubHanded = true
+        session.save()
+        let tag = session.manifest.name
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if await githubArchive.enqueue(tag: tag, localPath: localPath, sidecar: sidecar) {
+                logger.info("drive: Started GitHub archive of \(tag) in parallel")
+            }
+        }
     }
 
     private func addEvent(type: String, detail: String) {
@@ -435,15 +492,19 @@ private actor DriveEngine {
         let committed = current === session ? session.tailIndex : session.committedParts()
         let ackedParts = Int(session.manifest.acked) / drivePartSize
         if ackedParts < committed {
-            let part = try Data(contentsOf: session.partUrl(ackedParts))
             let skip = Int(session.manifest.acked) - ackedParts * drivePartSize
-            let chunk = part.dropFirst(skip)
+            var chunk = Data()
+            for index in ackedParts ..< min(ackedParts + driveChunkParts, committed) {
+                let part = try Data(contentsOf: session.partUrl(index))
+                chunk.append(index == ackedParts ? Data(part.dropFirst(skip)) : part)
+            }
             session.needsResync = true
             let result = try await api.putChunk(
                 uploadUrl: uploadUrl,
-                data: Data(chunk),
+                data: chunk,
                 offset: session.manifest.acked,
-                total: nil
+                total: nil,
+                progress: progress(for: session)
             )
             session.needsResync = false
             _ = try await apply(result, to: session)
@@ -459,11 +520,25 @@ private actor DriveEngine {
             uploadUrl: uploadUrl,
             data: Data(tail.dropFirst(skip)),
             offset: session.manifest.acked,
-            total: session.manifest.bytesTotal
+            total: session.manifest.bytesTotal,
+            progress: progress(for: session)
         )
         session.needsResync = false
         _ = try await apply(result, to: session)
         return true
+    }
+
+    private func progress(for session: DriveSession) -> @Sendable (Int64) -> Void {
+        let name = session.manifest.name
+        let meter = meters[name] ?? DriveMeter()
+        meters[name] = meter
+        let base = session.manifest.acked
+        let total = session.manifest.closed
+            ? session.manifest.bytesTotal
+            : Int64(session.tailIndex * drivePartSize + session.buffer.count)
+        return { sent in
+            meter.report(name: name, sent: base + sent, total: max(total, base + sent))
+        }
     }
 
     private func apply(_ result: DriveChunkResult, to session: DriveSession) async throws -> Bool {
@@ -496,7 +571,17 @@ private actor DriveEngine {
             $0.driveTotal = totalBytes
         }
         logger.info("drive: Uploaded \(session.manifest.name) (\(session.manifest.bytesTotal) bytes)")
-        if let localPath = session.manifest.info.localPath {
+        let name = session.manifest.name
+        meters[name] = nil
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                daysQueue.live[name] = nil
+                driveStatus.percent = nil
+            }
+        }
+        if session.manifest.githubHanded == true {
+            logger.info("drive: GitHub archive already running for \(session.manifest.name)")
+        } else if let localPath = session.manifest.info.localPath {
             if githubAuth.isSignedIn, DaysPrefs.isGitHubArchive,
                let sidecar = try? sidecarData(session),
                await githubArchive.enqueue(tag: session.manifest.name, localPath: localPath, sidecar: sidecar)

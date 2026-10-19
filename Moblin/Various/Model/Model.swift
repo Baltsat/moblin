@@ -1756,6 +1756,7 @@ final class Model: NSObject, ObservableObject {
     @objc private func handleOrientationDidChange(animated _: Bool) {
         followDeviceOrientation()
         updateOrientation()
+        updateStereoOrientation()
         driveRecordOrientation()
     }
 

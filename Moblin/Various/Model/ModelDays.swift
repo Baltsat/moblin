@@ -29,6 +29,7 @@ extension Model {
         }
         applyDaysCaptureMigration()
         applyDaysBitrateMigration()
+        daysPickStereoMic()
         applyDaysPendingPreset()
     }
 
@@ -49,18 +50,33 @@ extension Model {
             stream.bitrate = values.streamBitrate
             stream.maxKeyFrameInterval = 2
             stream.audioCodec = .aac
-            stream.audioBitrate = 128_000
+            stream.audioBitrate = 192_000
             stream.recording.overrideStream = false
             stream.recording.videoCodec = values.recordingCodec
             stream.recording.videoBitrate = values.recordingBitrate
             stream.recording.maxKeyFrameInterval = 2
-            stream.recording.audioBitrate = 128_000
+            stream.recording.audioBitrate = 192_000
         }
         database.videoStabilizationMode = .standard
         database.audio.preferStereoMic = true
         if reload, !isRecording, !isLive {
             reloadStreamIfEnabled(stream: stream)
             attachCamera()
+        }
+    }
+
+    func daysPickStereoMic() {
+        let want: SettingsMic = getSelectedScene()?.videoSource.cameraPosition == .front ? .front : .back
+        guard let target = database.mics.mics.first(where: {
+            $0.isAudioSession() && $0.builtInOrientation == want
+        }) else {
+            return
+        }
+        if database.mics.defaultMic != target.id {
+            database.mics.defaultMic = target.id
+        }
+        if mic.current != noMic, mic.current != target, mic.current.builtInOrientation != nil {
+            manualSelectMicById(id: target.id)
         }
     }
 
@@ -84,6 +100,7 @@ extension Model {
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         sceneUpdated(attachCamera: true, updateRemoteScene: false)
+        daysPickStereoMic()
         storeSettings()
     }
 
@@ -229,7 +246,7 @@ extension Model {
     }
 
     fileprivate func applyDaysBitrateMigration() {
-        let key = "daysBitrateMigration5"
+        let key = "daysBitrateMigration6"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return
         }
