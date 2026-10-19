@@ -678,9 +678,13 @@ struct MainView: View {
                 if model.lockScreen {
                     LockScreenView(model: model)
                 }
+                DaysDimView(dim: daysDim, recording: model.recording, drive: driveStatus)
                 SnapshotCountdownView(snapshot: model.snapshot)
                 InstantReplayCountdownView(replay: model.replay)
             }
+            .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in
+                daysDim.touch()
+            })
             .onAppear {
                 model.setup()
             }

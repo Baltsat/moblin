@@ -4,6 +4,7 @@ struct StreamRecordingDriveView: View {
     @EnvironmentObject var model: Model
     @ObservedObject var recording: SettingsStreamRecording
     @ObservedObject private var status = driveStatus
+    @AppStorage("daysAutoStartRecording") private var autoStart = false
     @AppStorage("daysYouTubeEnabled") private var youTubeEnabled = true
     @AppStorage("daysYouTubeCellular") private var youTubeCellular = false
 
@@ -20,6 +21,7 @@ struct StreamRecordingDriveView: View {
                     model.driveSignIn()
                 }
             }
+            Toggle("Start recording when the app opens", isOn: $autoStart)
             Toggle("Stream to YouTube while recording", isOn: $youTubeEnabled)
             Toggle("Stream to YouTube over cellular", isOn: $youTubeCellular)
             if status.signedIn, !status.hasYouTube {

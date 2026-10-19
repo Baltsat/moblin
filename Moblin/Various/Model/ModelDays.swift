@@ -17,6 +17,13 @@ extension Model {
             stream.recording.autoStartRecording = false
             stream.recording.autoStopRecording = false
         }
+        let lowLightKey = "daysLowLightBoost1"
+        if !UserDefaults.standard.bool(forKey: lowLightKey) {
+            for stream in database.streams {
+                stream.lowLightBoost = true
+            }
+            UserDefaults.standard.set(true, forKey: lowLightKey)
+        }
         let key = "daysDefaultsApplied2"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return

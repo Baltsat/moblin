@@ -5,6 +5,16 @@ final class MoblinShortcuts: AppShortcutsProvider {
     static let shortcutTileColor = ShortcutTileColor.navy
 
     nonisolated(unsafe) static let appShortcuts: [AppShortcut] = [
+        AppShortcut(intent: StartRecordingIntent(), phrases: [
+            "\(.applicationName), start recording",
+        ],
+        shortTitle: "Start recording",
+        systemImageName: "record.circle"),
+        AppShortcut(intent: StopRecordingIntent(), phrases: [
+            "\(.applicationName), stop recording",
+        ],
+        shortTitle: "Stop recording",
+        systemImageName: "stop.circle"),
         AppShortcut(intent: MuteIntent(), phrases: [
             "\(.applicationName), mute",
         ],

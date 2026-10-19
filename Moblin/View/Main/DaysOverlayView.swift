@@ -21,10 +21,13 @@ private func daysUploadText(_ status: String, signedIn: Bool) -> String? {
     return status
 }
 
-private struct DaysPillView: View {
+struct DaysPillView: View {
     @ObservedObject var recording: RecordingProvider
     @ObservedObject var drive: DriveStatus
+    @ObservedObject var battery: Battery
+    @ObservedObject var status: StatusOther
     let isRecording: Bool
+    let isLive: Bool
     let onReconnect: () -> Void
 
     private var timer: String {
@@ -48,7 +51,7 @@ private struct DaysPillView: View {
         }
     }
 
-    private var statusPill: some View {
+    var statusPill: some View {
         let upload = daysUploadText(drive.text, signedIn: drive.signedIn)
         return HStack(spacing: 8) {
             if isRecording {
@@ -63,6 +66,17 @@ private struct DaysPillView: View {
                 Text(upload).font(.subheadline)
             } else if !isRecording {
                 Text("Ready").font(.subheadline)
+            }
+            if isLive {
+                Text("LIVE").font(.caption.weight(.bold)).foregroundStyle(.red)
+            }
+            if isRecording {
+                Image(systemName: battery.state == .charging ? "battery.100.bolt" : "battery.50")
+                    .font(.subheadline)
+                Text("\(Int(battery.level * 100))%").font(.caption).monospacedDigit()
+                if status.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue {
+                    Image(systemName: "thermometer.high").foregroundStyle(.orange)
+                }
             }
         }
         .foregroundStyle(.primary)
@@ -91,19 +105,57 @@ private struct DaysRoundButton: View {
 
 private struct DaysRecordButton: View {
     let isRecording: Bool
-    let action: () -> Void
+    let onStart: () -> Void
+    let onStop: () -> Void
+    @State private var progress = 0.0
 
     var body: some View {
-        Button(action: action) {
-            ZStack {
-                Circle().stroke(.white, lineWidth: 4).frame(width: 76, height: 76)
-                RoundedRectangle(cornerRadius: isRecording ? 8 : 30)
-                    .fill(.red)
-                    .frame(width: isRecording ? 32 : 60, height: isRecording ? 32 : 60)
-            }
-            .animation(.easeInOut(duration: 0.2), value: isRecording)
+        ZStack {
+            Circle().stroke(.white, lineWidth: 4).frame(width: 76, height: 76)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(.red, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .frame(width: 76, height: 76)
+            RoundedRectangle(cornerRadius: isRecording ? 8 : 30)
+                .fill(.red)
+                .frame(width: isRecording ? 32 : 60, height: isRecording ? 32 : 60)
         }
-        .buttonStyle(.plain)
+        .frame(width: 84, height: 84)
+        .contentShape(Circle())
+        .animation(.easeInOut(duration: 0.2), value: isRecording)
+        .overlay(alignment: .bottom) {
+            if isRecording {
+                Text("Hold to stop")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .offset(y: 16)
+            }
+        }
+        .onTapGesture {
+            if !isRecording {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                onStart()
+            }
+        }
+        .onLongPressGesture(minimumDuration: 1.5, maximumDistance: 60) {
+            if isRecording {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                progress = 0
+                onStop()
+            }
+        } onPressingChanged: { pressing in
+            if pressing, isRecording {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.linear(duration: 1.5)) {
+                    progress = 1
+                }
+            } else {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    progress = 0
+                }
+            }
+        }
     }
 }
 
@@ -165,6 +217,8 @@ struct DaysBlackView: View {
     }
 }
 
+@MainActor private var daysAutoStartDone = false
+
 struct DaysOverlayView: View {
     @EnvironmentObject var model: Model
     @ObservedObject var orientation: Orientation
@@ -173,7 +227,12 @@ struct DaysOverlayView: View {
     let isRecording: Bool
 
     private var pill: some View {
-        DaysPillView(recording: recording, drive: drive, isRecording: isRecording) {
+        DaysPillView(recording: recording,
+                     drive: drive,
+                     battery: model.battery,
+                     status: model.statusOther,
+                     isRecording: isRecording,
+                     isLive: model.isLive) {
             model.driveSignIn()
         }
     }
@@ -191,14 +250,26 @@ struct DaysOverlayView: View {
     }
 
     private var record: some View {
-        DaysRecordButton(isRecording: isRecording) {
-            model.toggleRecording()
-        }
+        DaysRecordButton(isRecording: isRecording,
+                         onStart: { model.startRecording() },
+                         onStop: { model.stopRecording() })
     }
 
     var body: some View {
         GeometryReader { geometry in
             content(portrait: geometry.size.height >= geometry.size.width)
+        }
+        .onAppear {
+            model.completePendingYouTube()
+            guard UserDefaults.standard.bool(forKey: "daysAutoStartRecording"), !daysAutoStartDone else {
+                return
+            }
+            daysAutoStartDone = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                if !model.isRecording {
+                    model.startRecording()
+                }
+            }
         }
     }
 
@@ -246,6 +317,83 @@ struct DaysOverlayView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
+        }
+    }
+}
+
+@MainActor
+final class DaysDim: ObservableObject {
+    @Published var dimmed = false
+    private var lastTouch = Date()
+    private var savedBrightness: CGFloat?
+
+    func touch() {
+        lastTouch = Date()
+    }
+
+    func tick(active: Bool) {
+        if !active {
+            if dimmed {
+                wake()
+            }
+        } else if !dimmed, Date().timeIntervalSince(lastTouch) > 15 {
+            savedBrightness = UIScreen.main.brightness
+            UIScreen.main.brightness = 0.02
+            dimmed = true
+        }
+    }
+
+    func wake() {
+        if let savedBrightness {
+            UIScreen.main.brightness = savedBrightness
+        }
+        savedBrightness = nil
+        dimmed = false
+        lastTouch = Date()
+    }
+}
+
+@MainActor
+let daysDim = DaysDim()
+
+struct DaysDimView: View {
+    @EnvironmentObject var model: Model
+    @ObservedObject var dim: DaysDim
+    @ObservedObject var recording: RecordingProvider
+    @ObservedObject var drive: DriveStatus
+
+    var body: some View {
+        ZStack {
+            if dim.dimmed {
+                Color.black.opacity(0.8)
+                    .ignoresSafeArea()
+                VStack {
+                    DaysPillView(recording: recording,
+                                 drive: drive,
+                                 battery: model.battery,
+                                 status: model.statusOther,
+                                 isRecording: true,
+                                 isLive: model.isLive) {}
+                        .opacity(0.9)
+                    Spacer()
+                }
+                .padding(.top, 12)
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        dim.wake()
+                    }
+                    .gesture(DragGesture(minimumDistance: 0).onEnded { _ in
+                        dim.wake()
+                    })
+            }
+        }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            dim.tick(active: model.isRecording && model.showingPanel == .none && !model.showStealthMode)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            dim.wake()
         }
     }
 }
