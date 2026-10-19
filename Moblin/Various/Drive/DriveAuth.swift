@@ -110,6 +110,15 @@ final class DriveStatus: ObservableObject {
     @Published var signedIn = driveAuth.isSignedIn
     @Published var hasYouTube = driveAuth.hasScope(youTubeScope)
     @Published var text = ""
+    @Published var email = UserDefaults.standard.string(forKey: "daysGoogleEmail") ?? ""
+
+    func refreshEmail() async {
+        guard signedIn, let email = await DriveApi().userEmail() else {
+            return
+        }
+        self.email = email
+        UserDefaults.standard.set(email, forKey: "daysGoogleEmail")
+    }
 }
 
 @MainActor
@@ -123,6 +132,11 @@ extension Model {
         }
         OIDAuthorizationService.discoverConfiguration(forIssuer: driveIssuer) { configuration, _ in
             guard let configuration else {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self.makeErrorToast(title: String(localized: "Cannot reach Google, check the network"))
+                    }
+                }
                 return
             }
             nonisolated(unsafe) let serviceConfiguration = configuration
@@ -179,5 +193,7 @@ extension Model {
         driveStatus.signedIn = false
         driveStatus.hasYouTube = false
         driveStatus.text = ""
+        driveStatus.email = ""
+        UserDefaults.standard.removeObject(forKey: "daysGoogleEmail")
     }
 }

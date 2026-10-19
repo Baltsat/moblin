@@ -341,6 +341,11 @@ private actor DriveEngine {
 
     private func drain() async {
         while let session = nextSession() {
+            guard DaysNet.shared.canUpload() else {
+                setStatus("Google Drive: waiting for network")
+                updateStatus()
+                return
+            }
             do {
                 guard try await step(session) else {
                     return
@@ -374,7 +379,7 @@ private actor DriveEngine {
             } catch {
                 session.needsResync = true
                 failures += 1
-                let delay = min(5 << min(failures, 5), 120)
+                let delay = daysBackoff(failures)
                 logger.info("drive: Retry in \(delay) seconds after \(error)")
                 setStatus("Google Drive: waiting for network, retry in \(delay) s")
                 let continuation = wakeContinuation
@@ -479,10 +484,22 @@ private actor DriveEngine {
         session.manifest.done = true
         session.save()
         logger.info("drive: Uploaded \(session.manifest.name) (\(session.manifest.bytesTotal) bytes)")
+        if let localPath = session.manifest.info.localPath {
+            if githubAuth.isSignedIn, DaysPrefs.isGitHubArchive,
+               let sidecar = try? sidecarData(session),
+               await githubArchive.enqueue(tag: session.manifest.name, localPath: localPath, sidecar: sidecar)
+            {
+                logger.info("drive: Handed \(session.manifest.name) to the GitHub archive")
+            } else {
+                try? FileManager.default.removeItem(atPath: localPath)
+            }
+        }
         sessions[session.manifest.name] = nil
         try? FileManager.default.removeItem(at: session.dir)
-        if let localPath = session.manifest.info.localPath {
-            try? FileManager.default.removeItem(atPath: localPath)
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                daysNetStatus.markSynced()
+            }
         }
         setStatus("Google Drive: uploaded \(session.manifest.name)")
         wake()
@@ -498,17 +515,8 @@ private actor DriveEngine {
         return phone
     }
 
-    private func syncSidecar(_ session: DriveSession, force: Bool) async throws {
+    private func sidecarData(_ session: DriveSession) throws -> Data {
         let manifest = session.manifest
-        guard let folder = manifest.folderId else {
-            return
-        }
-        let changed = manifest.events.count > manifest.sidecarSyncedEvents
-            || (manifest.closed && !manifest.sidecarSyncedClosed)
-        let stale = Date().timeIntervalSince(session.sidecarSyncedAt) > driveSidecarInterval
-        guard manifest.sidecarFileId == nil || force || (changed && (stale || manifest.closed)) else {
-            return
-        }
         let sidecar = DriveSidecar(
             session: String(manifest.name.dropLast("_phone".count)),
             startMs: manifest.startMs,
@@ -528,7 +536,21 @@ private actor DriveEngine {
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let content = try encoder.encode(sidecar)
+        return try encoder.encode(sidecar)
+    }
+
+    private func syncSidecar(_ session: DriveSession, force: Bool) async throws {
+        let manifest = session.manifest
+        guard let folder = manifest.folderId else {
+            return
+        }
+        let changed = manifest.events.count > manifest.sidecarSyncedEvents
+            || (manifest.closed && !manifest.sidecarSyncedClosed)
+        let stale = Date().timeIntervalSince(session.sidecarSyncedAt) > driveSidecarInterval
+        guard manifest.sidecarFileId == nil || force || (changed && (stale || manifest.closed)) else {
+            return
+        }
+        let content = try sidecarData(session)
         if let fileId = manifest.sidecarFileId {
             do {
                 try await api.updateJson(fileId: fileId, content: content)
@@ -555,6 +577,12 @@ private actor DriveEngine {
     private func updateStatus() {
         let pending = sessions.values.filter { !$0.manifest.done }
         guard !pending.isEmpty else {
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    daysNetStatus.queueCount = 0
+                    daysNetStatus.queueBytes = 0
+                }
+            }
             return
         }
         var queued: Int64 = 0
@@ -563,6 +591,14 @@ private actor DriveEngine {
                 ? session.manifest.bytesTotal
                 : Int64(session.tailIndex * drivePartSize + session.buffer.count)
             queued += total - session.manifest.acked
+        }
+        let count = pending.count
+        let bytes = max(queued, 0)
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                daysNetStatus.queueCount = count
+                daysNetStatus.queueBytes = bytes
+            }
         }
         let live = current != nil ? "recording, " : ""
         setStatus("Google Drive: \(live)\(UInt64(max(queued, 0)).formatBytes()) queued")
@@ -579,7 +615,6 @@ private actor DriveEngine {
 
 final class DriveUploader: @unchecked Sendable {
     private let inputs: AsyncStream<DriveInput>.Continuation
-    private let pathMonitor = NWPathMonitor()
 
     init() {
         let (stream, continuation) = makeStream(of: DriveInput.self)
@@ -593,12 +628,9 @@ final class DriveUploader: @unchecked Sendable {
                 await engine.handle(input)
             }
         }
-        pathMonitor.pathUpdateHandler = { [continuation] path in
-            if path.status == .satisfied, !path.usesInterfaceType(.cellular) {
-                continuation.yield(.resume)
-            }
+        DaysNet.shared.observe { [continuation] in
+            continuation.yield(.resume)
         }
-        pathMonitor.start(queue: DispatchQueue(label: "com.eerimoq.moblin.drive.path"))
     }
 
     func arm(info: DriveSessionInfo) {

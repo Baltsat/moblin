@@ -103,6 +103,40 @@ private struct DaysRoundButton: View {
     }
 }
 
+private struct DaysTorchButton: View {
+    let model: Model
+    @ObservedObject var overlay: StreamOverlay
+
+    var body: some View {
+        Button {
+            model.toggleTorch()
+        } label: {
+            Image(systemName: overlay.isTorchOn ? "bolt.fill" : "bolt.slash.fill")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(overlay.isTorchOn ? .yellow : .white)
+                .frame(width: 44, height: 44)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct DaysLockBadge: View {
+    @ObservedObject var camera: CameraState
+
+    var body: some View {
+        if camera.aeAfLocked {
+            Label("AE/AF lock", systemImage: "lock.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.yellow)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.ultraThinMaterial, in: Capsule())
+                .environment(\.colorScheme, .dark)
+        }
+    }
+}
+
 private struct DaysRecordButton: View {
     let isRecording: Bool
     let onStart: () -> Void
@@ -249,6 +283,10 @@ struct DaysOverlayView: View {
         }
     }
 
+    private var torch: some View {
+        DaysTorchButton(model: model, overlay: model.streamOverlay)
+    }
+
     private var record: some View {
         DaysRecordButton(isRecording: isRecording,
                          onStart: { model.startRecording() },
@@ -261,7 +299,7 @@ struct DaysOverlayView: View {
         }
         .onAppear {
             model.completePendingYouTube()
-            guard UserDefaults.standard.bool(forKey: "daysAutoStartRecording"), !daysAutoStartDone else {
+            guard UserDefaults.standard.bool(forKey: DaysPrefs.autoStart), !daysAutoStartDone else {
                 return
             }
             daysAutoStartDone = true
@@ -286,6 +324,7 @@ struct DaysOverlayView: View {
                         }
                     }
                     Spacer()
+                    DaysLockBadge(camera: model.camera)
                     DaysZoomPillView(model: model, zoom: model.zoom)
                         .padding(.bottom, 14)
                     ZStack {
@@ -293,6 +332,7 @@ struct DaysOverlayView: View {
                         HStack {
                             black
                             Spacer()
+                            torch
                         }
                     }
                 }
@@ -309,9 +349,11 @@ struct DaysOverlayView: View {
                 VStack {
                     gear
                     Spacer()
+                    DaysLockBadge(camera: model.camera)
                     DaysZoomPillView(model: model, zoom: model.zoom)
                     record
                     Spacer()
+                    torch
                     black
                 }
             }
@@ -336,7 +378,9 @@ final class DaysDim: ObservableObject {
             if dimmed {
                 wake()
             }
-        } else if !dimmed, Date().timeIntervalSince(lastTouch) > 15 {
+        } else if !dimmed, DaysPrefs.dimSeconds > 0,
+                  Date().timeIntervalSince(lastTouch) > Double(DaysPrefs.dimSeconds)
+        {
             savedBrightness = UIScreen.main.brightness
             UIScreen.main.brightness = 0.02
             dimmed = true

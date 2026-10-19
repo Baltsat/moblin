@@ -7,41 +7,6 @@ private let youTubeStreamTitle = "Days phone"
 private let youTubeEnabledKey = "daysYouTubeEnabled"
 private let youTubeCellularKey = "daysYouTubeCellular"
 
-private final class DaysPathState: @unchecked Sendable {
-    private let lock = NSLock()
-    private var wifi = false
-    private var online = false
-    private let monitor = NWPathMonitor()
-
-    init() {
-        monitor.pathUpdateHandler = { [weak self] path in
-            guard let self else {
-                return
-            }
-            self.lock.withLock {
-                self.online = path.status == .satisfied
-                self.wifi = path.status == .satisfied && !path.usesInterfaceType(.cellular)
-            }
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    daysPathChanged()
-                }
-            }
-        }
-        monitor.start(queue: DispatchQueue(label: "com.baltsat.days.path"))
-    }
-
-    func canStream(cellular: Bool) -> Bool {
-        lock.withLock { cellular ? online : wifi }
-    }
-
-    var isOnline: Bool {
-        lock.withLock { online }
-    }
-}
-
-private let daysPathState = DaysPathState()
-
 private enum YouTubeError: Error {
     case failed(String)
 }
@@ -63,10 +28,9 @@ private func youTubeRequest(method: String,
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
     }
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.allowsCellularAccess = cellular
-    configuration.waitsForConnectivity = false
-    let (data, response) = try await URLSession(configuration: configuration).data(for: request)
+    let session = daysSession(allowCellular: cellular, request: 15, resource: 30)
+    defer { session.finishTasksAndInvalidate() }
+    let (data, response) = try await session.data(for: request)
     guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
         throw YouTubeError.failed(String(decoding: data.prefix(300), as: UTF8.self))
     }
@@ -233,6 +197,17 @@ private func youTubeCellularAllowed() -> Bool {
     UserDefaults.standard.bool(forKey: youTubeCellularKey)
 }
 
+private let daysPathObserverRegistered: Bool = {
+    DaysNet.shared.observe {
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                daysPathChanged()
+            }
+        }
+    }
+    return true
+}()
+
 @MainActor
 private func daysPathChanged() {
     pathGeneration += 1
@@ -249,7 +224,7 @@ private func daysPathChanged() {
 
 extension Model {
     fileprivate func youTubeNetworkSettled() {
-        let can = daysPathState.canStream(cellular: youTubeCellularAllowed())
+        let can = DaysNet.shared.canStream(cellular: youTubeCellularAllowed())
         if isRecording {
             if let session = youTubeSession {
                 if !can, youTubeStreaming {
@@ -259,18 +234,23 @@ extension Model {
                     stream.url = session.url
                     youTubeStreaming = true
                     startStream()
+                } else if can, youTubeStreaming, !isStreamConnected() {
+                    _ = stopStream()
+                    stream.url = session.url
+                    startStream()
                 }
             } else if can {
                 startYouTubeIfPossible()
             }
         }
-        if daysPathState.isOnline {
+        if DaysNet.shared.isOnline {
             completePendingYouTube()
         }
     }
 
     func completePendingYouTube() {
         daysModel = self
+        _ = daysPathObserverRegistered
         let active = youTubeSession?.broadcastId
         let ids = pendingIds().filter { $0 != active }
         guard driveAuth.isSignedIn, driveAuth.hasScope(youTubeScope), !ids.isEmpty else {
@@ -285,6 +265,7 @@ extension Model {
 
     func startYouTubeIfPossible() {
         daysModel = self
+        _ = daysPathObserverRegistered
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: youTubeEnabledKey) as? Bool ?? true,
               driveAuth.isSignedIn, driveAuth.hasScope(youTubeScope), !isLive, youTubeSession == nil
@@ -292,12 +273,22 @@ extension Model {
             return
         }
         let cellular = youTubeCellularAllowed()
-        guard daysPathState.canStream(cellular: cellular) else {
+        guard DaysNet.shared.canStream(cellular: cellular) else {
             return
         }
         let title = "\(youTubeTitleFormatter.string(from: Date())) \u{00B7} phone"
         youTubeTask = Task { [weak self] in
-            guard let prepared = try? await youTubePrepare(title: title, cellular: cellular) else {
+            var prepared: (url: String, broadcastId: String)?
+            for attempt in 1 ... 6 where prepared == nil && !Task.isCancelled {
+                prepared = try? await youTubePrepare(title: title, cellular: cellular)
+                if prepared == nil {
+                    try? await Task.sleep(for: .seconds(daysBackoff(attempt)))
+                    if !(await self?.isRecording ?? false) {
+                        return
+                    }
+                }
+            }
+            guard let prepared else {
                 return
             }
             guard !Task.isCancelled, let self, isRecording, !isLive else {

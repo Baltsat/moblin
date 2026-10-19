@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import Foundation
+import UIKit
 
 typealias CameraId = String
 
@@ -99,6 +100,7 @@ class CameraState: ObservableObject {
     @Published var lockedWhiteBalance: Float = 0
     @Published var isWhiteBalanceLocked = false
     @Published var manualFocusPoint: CGPoint?
+    @Published var aeAfLocked = false
 
     func setManualFocusPoint(value: CGPoint?) {
         if value != manualFocusPoint {
@@ -158,6 +160,7 @@ extension Model {
         }
         camera.isFocusesLocked[device] = false
         camera.isFocusLocked = false
+        camera.aeAfLocked = false
     }
 
     func setAutoFocus() {
@@ -178,6 +181,36 @@ extension Model {
         }
         camera.isFocusesLocked[device] = false
         camera.isFocusLocked = false
+        camera.aeAfLocked = false
+    }
+
+    func toggleAeAfLock(at point: CGPoint?) {
+        if camera.aeAfLocked {
+            setAutoFocus()
+            return
+        }
+        if let point {
+            setFocusPointOfInterest(focusPoint: point)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (point == nil ? 0 : 0.8)) { [self] in
+            guard let device = cameraDevice else {
+                return
+            }
+            do {
+                try device.lockForConfiguration()
+                if device.isFocusModeSupported(.locked) {
+                    device.focusMode = .locked
+                }
+                if device.isExposureModeSupported(.locked) {
+                    device.exposureMode = .locked
+                }
+                device.unlockForConfiguration()
+                camera.aeAfLocked = true
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } catch let error as NSError {
+                logger.info("while locking device for ae/af lock: \(error)")
+            }
+        }
     }
 
     func setManualFocus(lensPosition: Float) {

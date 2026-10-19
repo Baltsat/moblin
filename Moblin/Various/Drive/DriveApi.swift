@@ -16,14 +16,11 @@ private struct DriveFileList: Decodable {
 }
 
 final class DriveApi: Sendable {
-    private let session: URLSession
+    private let wifiSession = daysSession(allowCellular: false, resource: 900)
+    private let anySession = daysSession(allowCellular: true, resource: 900)
 
-    init() {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.allowsCellularAccess = false
-        configuration.timeoutIntervalForRequest = 90
-        configuration.waitsForConnectivity = false
-        session = URLSession(configuration: configuration)
+    private var session: URLSession {
+        DaysPrefs.isWifiOnly ? wifiSession : anySession
     }
 
     private func send(_ request: URLRequest, body: Data?) async throws -> (HTTPURLResponse, Data) {
@@ -62,6 +59,18 @@ final class DriveApi: Sendable {
         default:
             throw DriveError.fatal("http \(response.statusCode) \(text)")
         }
+    }
+
+    func userEmail() async -> String? {
+        var components = URLComponents(string: "https://www.googleapis.com/drive/v3/about")!
+        components.queryItems = [URLQueryItem(name: "fields", value: "user(emailAddress)")]
+        guard let (response, data) = try? await send(URLRequest(url: components.url!), body: nil),
+              response.statusCode == 200,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return nil
+        }
+        return (object["user"] as? [String: Any])?["emailAddress"] as? String
     }
 
     func findOrCreateFolder(name: String, parentId: String) async throws -> String {

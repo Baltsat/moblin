@@ -138,7 +138,7 @@ private struct MenuView: View {
         switch model.showingPanel {
         case .settings:
             NavigationStack {
-                SettingsView(database: model.database)
+                DaysSettingsView(database: model.database)
                     .navigationBarTitleDisplayMode(.inline)
             }
         case .bitrate:
@@ -511,11 +511,11 @@ struct MainView: View {
         model.setFocusPointOfInterest(focusPoint: CGPoint(x: x, y: y))
     }
 
-    private func handleLeaveTapToFocus() {
-        guard model.database.tapToFocus else {
-            return
+    private func handleLongPressLock(size: CGSize, location: CGPoint?) {
+        let point = location.map {
+            CGPoint(x: ($0.x / size.width).clamped(to: 0 ... 1), y: ($0.y / size.height).clamped(to: 0 ... 1))
         }
-        model.setAutoFocus()
+        model.toggleAeAfLock(at: point)
     }
 
     private func browserWidgets(streamSize: CGSize) -> some View {
@@ -539,9 +539,16 @@ struct MainView: View {
                     .onTapGesture(count: 1) {
                         handleTapToFocus(size: layout.size, location: $0)
                     }
-                    .onLongPressGesture {
-                        handleLeaveTapToFocus()
-                    }
+                    .gesture(
+                        LongPressGesture(minimumDuration: 0.5)
+                            .sequenced(before: DragGesture(minimumDistance: 0))
+                            .onEnded { value in
+                                guard case let .second(true, drag) = value else {
+                                    return
+                                }
+                                handleLongPressLock(size: layout.size, location: drag?.location)
+                            }
+                    )
                 StreamOverlayTapGridView(camera: model.camera, size: layout.size)
                 browserWidgets(streamSize: layout.size)
             }

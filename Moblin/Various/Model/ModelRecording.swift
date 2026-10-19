@@ -25,6 +25,9 @@ extension Model {
             return
         }
         macrosEventOccurred(MacroEvent(event: .startRecording))
+        if DaysPrefs.bool(DaysPrefs.torchDefault, false), !streamOverlay.isTorchOn {
+            setTorch(on: true)
+        }
         startYouTubeIfPossible()
     }
 
