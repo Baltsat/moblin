@@ -25,6 +25,7 @@ extension Model {
             return
         }
         macrosEventOccurred(MacroEvent(event: .startRecording))
+        startYouTubeIfPossible()
     }
 
     func stopRecording(toastTitle: String? = nil, toastSubTitle: String? = nil) {
@@ -34,6 +35,7 @@ extension Model {
         macrosEventOccurred(MacroEvent(event: .stopRecording))
         setIsRecording(value: false)
         stopDriveSession()
+        stopYouTubeIfStreaming()
         if let toastTitle {
             makeToast(title: toastTitle, subTitle: toastSubTitle)
         }

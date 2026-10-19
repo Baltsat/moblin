@@ -25,14 +25,32 @@ private struct DaysPillView: View {
     @ObservedObject var recording: RecordingProvider
     @ObservedObject var drive: DriveStatus
     let isRecording: Bool
+    let onReconnect: () -> Void
 
     private var timer: String {
         recording.length.split(separator: " ").first.map(String.init) ?? ""
     }
 
     var body: some View {
+        if drive.signedIn, !drive.hasYouTube {
+            Button(action: onReconnect) {
+                Label("Tap to reconnect Google", systemImage: "exclamationmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .environment(\.colorScheme, .dark)
+            }
+            .buttonStyle(.plain)
+        } else {
+            statusPill
+        }
+    }
+
+    private var statusPill: some View {
         let upload = daysUploadText(drive.text, signedIn: drive.signedIn)
-        HStack(spacing: 8) {
+        return HStack(spacing: 8) {
             if isRecording {
                 Circle().fill(.red).frame(width: 8, height: 8)
                 Text(timer)
@@ -89,6 +107,64 @@ private struct DaysRecordButton: View {
     }
 }
 
+private struct DaysZoomPillView: View {
+    let model: Model
+    @ObservedObject var zoom: Zoom
+
+    private func button(_ x: Float, _ label: String) -> some View {
+        let active = abs(zoom.x - x) < 0.25
+        return Button {
+            model.setZoomX(x: x)
+        } label: {
+            Text(label)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(active ? .yellow : .white)
+                .frame(width: 36, height: 36)
+                .background(active ? Color.black.opacity(0.5) : .clear, in: Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            button(1, "1\u{00D7}")
+            button(2, "2\u{00D7}")
+        }
+        .padding(3)
+        .background(.ultraThinMaterial, in: Capsule())
+        .environment(\.colorScheme, .dark)
+    }
+}
+
+struct DaysBlackView: View {
+    let model: Model
+    @State private var hint = true
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if hint {
+                Text("Double-tap to wake")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            model.setStealthMode(on: false)
+        }
+        .onAppear {
+            model.disableScreenPreview()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                hint = false
+            }
+        }
+        .onDisappear {
+            model.maybeEnableScreenPreview()
+        }
+    }
+}
+
 struct DaysOverlayView: View {
     @EnvironmentObject var model: Model
     @ObservedObject var orientation: Orientation
@@ -97,7 +173,9 @@ struct DaysOverlayView: View {
     let isRecording: Bool
 
     private var pill: some View {
-        DaysPillView(recording: recording, drive: drive, isRecording: isRecording)
+        DaysPillView(recording: recording, drive: drive, isRecording: isRecording) {
+            model.driveSignIn()
+        }
     }
 
     private var gear: some View {
@@ -108,7 +186,7 @@ struct DaysOverlayView: View {
 
     private var black: some View {
         DaysRoundButton(systemName: "moon.fill") {
-            model.toggleStealthMode()
+            model.setStealthMode(on: true)
         }
     }
 
@@ -118,23 +196,15 @@ struct DaysOverlayView: View {
         }
     }
 
-    private var insets: UIEdgeInsets {
-        UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-            .first?.safeAreaInsets ?? .zero
-    }
-
     var body: some View {
-        content
-            .padding(.top, insets.top)
-            .padding(.bottom, insets.bottom)
-            .padding(.leading, insets.left)
-            .padding(.trailing, insets.right)
+        GeometryReader { geometry in
+            content(portrait: geometry.size.height >= geometry.size.width)
+        }
     }
 
     @ViewBuilder
-    private var content: some View {
-        if orientation.isPortrait {
+    private func content(portrait: Bool) -> some View {
+        if portrait {
             ZStack {
                 VStack {
                     ZStack {
@@ -145,6 +215,8 @@ struct DaysOverlayView: View {
                         }
                     }
                     Spacer()
+                    DaysZoomPillView(model: model, zoom: model.zoom)
+                        .padding(.bottom, 14)
                     ZStack {
                         record
                         HStack {
@@ -166,6 +238,7 @@ struct DaysOverlayView: View {
                 VStack {
                     gear
                     Spacer()
+                    DaysZoomPillView(model: model, zoom: model.zoom)
                     record
                     Spacer()
                     black

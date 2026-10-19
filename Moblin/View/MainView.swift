@@ -73,6 +73,25 @@ private struct HideShowButtonPanelView: View {
     }
 }
 
+private struct DoneButtonView: View {
+    let onClose: () -> Void
+
+    var body: some View {
+        Button {
+            onClose()
+        } label: {
+            Text("Done")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+                .environment(\.colorScheme, .dark)
+                .padding(8)
+        }
+    }
+}
+
 private struct PanelButtonsView: View {
     let model: Model
     let backgroundColor: Color
@@ -90,14 +109,14 @@ private struct PanelButtonsView: View {
                 if #available(iOS 26, *) {
                     HStack(spacing: 0) {
                         HideShowButtonPanelView()
-                        CloseButtonView {
+                        DoneButtonView {
                             onClose()
                         }
                     }
                 } else {
                     HStack(spacing: 0) {
                         HideShowButtonPanelView()
-                        CloseButtonView {
+                        DoneButtonView {
                             onClose()
                         }
                     }
@@ -567,8 +586,7 @@ struct MainView: View {
                     let backgroundColor = model.panelHidden ? model.showingPanel
                         .buttonsBackgroundColor() : .clear
                     PanelButtonsView(model: model, backgroundColor: backgroundColor)
-                        .padding(.trailing, 10)
-                        .padding(.top, -7)
+                        .padding(.trailing, 6)
                 }
             }
             .gesture(
@@ -644,14 +662,6 @@ struct MainView: View {
         }
     }
 
-    private func edgesToIgnore() -> Edge.Set {
-        if isPhone() {
-            .all
-        } else {
-            []
-        }
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             let all = ZStack {
@@ -663,14 +673,7 @@ struct MainView: View {
                 WebBrowserAlertsView(model: model)
                     .opacity(webBrowserController.showAlert ? 1 : 0)
                 if model.showStealthMode {
-                    StealthModeView(
-                        model: model,
-                        quickButtons: quickButtons,
-                        chat: model.chat,
-                        chatAlerts: model.chatActivityFeed,
-                        stealthMode: model.stealthMode,
-                        orientation: orientation
-                    )
+                    DaysBlackView(model: model)
                 }
                 if model.lockScreen {
                     LockScreenView(model: model)
@@ -748,6 +751,5 @@ struct MainView: View {
             KeyPressView(model: model)
                 .frame(width: 0, height: 0)
         }
-        .ignoresSafeArea(.container, edges: edgesToIgnore())
     }
 }

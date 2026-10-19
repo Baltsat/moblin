@@ -4,6 +4,8 @@ struct StreamRecordingDriveView: View {
     @EnvironmentObject var model: Model
     @ObservedObject var recording: SettingsStreamRecording
     @ObservedObject private var status = driveStatus
+    @AppStorage("daysYouTubeEnabled") private var youTubeEnabled = true
+    @AppStorage("daysYouTubeCellular") private var youTubeCellular = false
 
     var body: some View {
         Section {
@@ -17,6 +19,11 @@ struct StreamRecordingDriveView: View {
                 TextButtonView("Sign in to Google") {
                     model.driveSignIn()
                 }
+            }
+            Toggle("Stream to YouTube while recording", isOn: $youTubeEnabled)
+            Toggle("Stream to YouTube over cellular", isOn: $youTubeCellular)
+            if status.signedIn, !status.hasYouTube {
+                Text("Sign in to Google again to allow YouTube.")
             }
             if !status.text.isEmpty {
                 Text(status.text)

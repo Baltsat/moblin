@@ -3,7 +3,7 @@ import AppAuthCore
 import Foundation
 
 let driveIssuer = URL(string: "https://accounts.google.com")!
-let driveScopes = ["https://www.googleapis.com/auth/drive"]
+let driveScopes = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/youtube"]
 
 enum DriveError: Error {
     case notSignedIn
@@ -43,6 +43,10 @@ final class DriveAuth: NSObject, OIDAuthStateChangeDelegate, @unchecked Sendable
 
     var isSignedIn: Bool {
         lock.withLock { authState?.isAuthorized == true }
+    }
+
+    func hasScope(_ scope: String) -> Bool {
+        lock.withLock { authState?.scope?.split(separator: " ").contains(Substring(scope)) == true }
     }
 
     func set(_ state: OIDAuthState?) {
@@ -104,6 +108,7 @@ let driveSignInState = DriveSignInState()
 @MainActor
 final class DriveStatus: ObservableObject {
     @Published var signedIn = driveAuth.isSignedIn
+    @Published var hasYouTube = driveAuth.hasScope(youTubeScope)
     @Published var text = ""
 }
 
@@ -161,6 +166,7 @@ extension Model {
                 driveAuth.set(authState)
                 MainActor.assumeIsolated {
                     driveStatus.signedIn = driveAuth.isSignedIn
+                    driveStatus.hasYouTube = driveAuth.hasScope(youTubeScope)
                     driveSignInState.session = nil
                 }
                 driveUploader.resume()
@@ -171,6 +177,7 @@ extension Model {
     func driveSignOut() {
         driveAuth.set(nil)
         driveStatus.signedIn = false
+        driveStatus.hasYouTube = false
         driveStatus.text = ""
     }
 }
