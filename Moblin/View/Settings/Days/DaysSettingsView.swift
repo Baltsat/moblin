@@ -506,7 +506,7 @@ private struct DaysEffectiveSection: View {
             Text("Effective capture")
         } footer: {
             if info.fellBack {
-                Text("The camera has no matching format; the default format is used.")
+                Text("This camera cannot do the selected quality; the closest format is used.")
             }
         }
     }

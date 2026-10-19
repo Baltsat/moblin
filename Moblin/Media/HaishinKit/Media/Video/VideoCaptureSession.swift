@@ -644,9 +644,40 @@ final class VideoCaptureSession: NSObject, @unchecked Sendable {
                               useAutoFrameRate: useAutoFrameRate,
                               useLandscapeInPortrait: useLandscapeInPortrait)
         case let .notFound(error):
+            if let (format, altFps) = findClosestVideoFormat(device: device, fps: fps, colorSpace: colorSpace) {
+                applyDeviceFormat(device: device,
+                                  format: format,
+                                  fps: altFps,
+                                  colorSpace: colorSpace,
+                                  useAutoFrameRate: false,
+                                  useLandscapeInPortrait: false)
+            }
             DaysCaptureInfo.shared.formatMissing()
             reportFormatNotFound(device, error)
         }
+    }
+
+    private func findClosestVideoFormat(device: AVCaptureDevice,
+                                        fps: Float64,
+                                        colorSpace: AVCaptureColorSpace) -> (AVCaptureDevice.Format, Float64)?
+    {
+        let maxWidth = Int32(captureSize.width)
+        let formatColorRange = isExternalCameraVideoRange(device, colorRange) ? .full : colorRange
+        for tryFps in [fps, 30.0] {
+            var formats = device.formats.filter {
+                $0.isFrameRateSupported(tryFps)
+                    && $0.formatDescription.dimensions.width <= maxWidth
+                    && !$0.isVideoBinned
+                    && $0.supportedColorSpaces.contains(colorSpace)
+            }
+            formats = filterFormatsByColorRange(formats, formatColorRange)
+            if let best = formats.max(by: {
+                $0.formatDescription.dimensions.width < $1.formatDescription.dimensions.width
+            }) {
+                return (best, tryFps)
+            }
+        }
+        return nil
     }
 
     private func applyDeviceFormat(device: AVCaptureDevice,

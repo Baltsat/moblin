@@ -9,6 +9,7 @@ private let daysQuickButtons: Set<SettingsQuickButtonType> = [
 extension Model {
     func applyDaysDefaults() {
         database.portrait = false
+        database.mirrorFrontCameraOnStream = false
         database.showAllSettings = false
         database.tapToFocus = true
         for button in database.quickButtons {
@@ -69,6 +70,20 @@ extension Model {
         } else {
             daysApplyPreset(preset)
         }
+    }
+
+    func daysFlipCamera() {
+        guard let scene = getSelectedScene() else {
+            return
+        }
+        if scene.videoSource.cameraPosition == .front {
+            scene.videoSource.cameraPosition = .back
+        } else {
+            scene.videoSource.cameraPosition = .front
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        sceneUpdated(attachCamera: true, updateRemoteScene: false)
+        storeSettings()
     }
 
     func daysThermalChanged() {

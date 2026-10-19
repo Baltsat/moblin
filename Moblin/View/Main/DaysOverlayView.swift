@@ -124,6 +124,27 @@ private struct DaysTorchButton: View {
     }
 }
 
+private struct DaysFlipButton: View {
+    let model: Model
+
+    var body: some View {
+        DaysRoundButton(systemName: "arrow.triangle.2.circlepath.camera") {
+            model.daysFlipCamera()
+        }
+    }
+}
+
+private struct DaysZoomIfBack: View {
+    let model: Model
+    @ObservedObject var overlay: StreamOverlay
+
+    var body: some View {
+        if !overlay.isFrontCameraSelected {
+            DaysZoomPillView(model: model, zoom: model.zoom)
+        }
+    }
+}
+
 private struct DaysLockBadge: View {
     @ObservedObject var camera: CameraState
 
@@ -328,13 +349,14 @@ struct DaysOverlayView: View {
                     }
                     Spacer()
                     DaysLockBadge(camera: model.camera)
-                    DaysZoomPillView(model: model, zoom: model.zoom)
+                    DaysZoomIfBack(model: model, overlay: model.streamOverlay)
                         .padding(.bottom, 14)
                     ZStack {
                         record
                         HStack {
                             black
                             Spacer()
+                            DaysFlipButton(model: model)
                             torch
                         }
                     }
@@ -353,10 +375,11 @@ struct DaysOverlayView: View {
                     gear
                     Spacer()
                     DaysLockBadge(camera: model.camera)
-                    DaysZoomPillView(model: model, zoom: model.zoom)
+                    DaysZoomIfBack(model: model, overlay: model.streamOverlay)
                     record
                     Spacer()
                     torch
+                    DaysFlipButton(model: model)
                     black
                 }
             }
