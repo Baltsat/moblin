@@ -407,6 +407,7 @@ final class VideoCaptureSession: NSObject, @unchecked Sendable {
             if device.connection.isVideoStabilizationSupported {
                 device.connection.preferredVideoStabilizationMode = params.preferredVideoStabilizationMode
             }
+            DaysCaptureInfo.shared.attached(device.connection)
             updateOrientation(device: device)
             device.output.setSampleBufferDelegate(device.outputHandler, queue: processorPipelineQueue)
         }
@@ -643,6 +644,7 @@ final class VideoCaptureSession: NSObject, @unchecked Sendable {
                               useAutoFrameRate: useAutoFrameRate,
                               useLandscapeInPortrait: useLandscapeInPortrait)
         case let .notFound(error):
+            DaysCaptureInfo.shared.formatMissing()
             reportFormatNotFound(device, error)
         }
     }
@@ -677,6 +679,9 @@ final class VideoCaptureSession: NSObject, @unchecked Sendable {
                 #endif
             }
             device.unlockForConfiguration()
+            DaysCaptureInfo.shared.formatApplied(width: Int(format.formatDescription.dimensions.width),
+                                                 height: Int(format.formatDescription.dimensions.height),
+                                                 fps: useAutoFrameRate ? 0 : Int(fps))
         } catch {
             logger.info("video-unit: Error while locking device: \(error)")
         }

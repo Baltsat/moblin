@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 private let daysResolutions: [SettingsStreamResolution] = [.r3840x2160, .r2560x1440, .r1920x1080, .r1280x720]
@@ -292,12 +293,183 @@ private struct DaysUploadSection: View {
     }
 }
 
+private func daysMb(_ bytes: Int64) -> String {
+    String(format: "%.0f", Double(bytes) / 1_048_576)
+}
+
+private struct DaysLinkRow: View {
+    let title: LocalizedStringKey
+    let icon: String
+    let detail: String
+    let url: URL?
+
+    var body: some View {
+        if let url {
+            Link(destination: url) {
+                row
+            }
+        } else {
+            row.foregroundStyle(.secondary)
+        }
+    }
+
+    private var row: some View {
+        LabeledContent {
+            Text(detail)
+                .font(.footnote)
+        } label: {
+            Label(title, systemImage: icon)
+        }
+    }
+}
+
+private func daysDriveDetail(_ item: DaysQueueItem) -> String {
+    if item.driveDone {
+        return "\(daysMb(item.driveTotal)) MB"
+    }
+    return "\(daysMb(item.driveAcked)) / \(daysMb(item.driveTotal)) MB"
+}
+
+private func daysGitHubDetail(_ item: DaysQueueItem) -> String {
+    if item.githubFinished {
+        return "\(item.githubTotal) / \(item.githubTotal) parts"
+    }
+    return item.githubTotal == 0 ? "queued" : "\(item.githubDone) / \(item.githubTotal) parts"
+}
+
+private struct DaysNowRecordingSection: View {
+    let model: Model
+    @ObservedObject var queue: DaysQueue
+
+    var body: some View {
+        if model.isRecording {
+            let item = queue.items.first
+            let youTube = model.youTubeLiveState()
+            Section("Now recording") {
+                if let youTube {
+                    DaysLinkRow(title: "YouTube",
+                                icon: "play.rectangle",
+                                detail: youTube.state,
+                                url: youTube.id.flatMap { daysYouTubeUrl($0) })
+                }
+                if let item {
+                    let fileUrl = item.driveFileId.flatMap { daysDriveFileUrl($0) }
+                        ?? queue.phoneFolderId.flatMap { daysDriveFolderUrl($0) }
+                    DaysLinkRow(title: "Google Drive",
+                                icon: "externaldrive",
+                                detail: daysDriveDetail(item),
+                                url: fileUrl)
+                    if item.githubQueued {
+                        DaysLinkRow(title: "GitHub",
+                                    icon: "archivebox",
+                                    detail: daysGitHubDetail(item),
+                                    url: item.githubReady ? daysGitHubReleaseUrl(item.name) : nil)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct DaysQueueSection: View {
+    @ObservedObject var queue: DaysQueue
+
+    private func timeText(_ item: DaysQueueItem) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, HH:mm:ss"
+        return formatter.string(from: Date(timeIntervalSince1970: Double(item.startMs) / 1000))
+    }
+
+    var body: some View {
+        Section("Queue") {
+            ForEach(queue.items) { item in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(timeText(item))
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Image(systemName: item.finished ? "checkmark.circle.fill" : "arrow.up.circle")
+                            .foregroundStyle(item.finished ? .green : .secondary)
+                    }
+                    DaysLinkRow(title: "Drive",
+                                icon: "externaldrive",
+                                detail: daysDriveDetail(item),
+                                url: item.driveFileId.flatMap { daysDriveFileUrl($0) }
+                                    ?? queue.phoneFolderId.flatMap { daysDriveFolderUrl($0) })
+                    if item.githubQueued {
+                        DaysLinkRow(title: "GitHub",
+                                    icon: "archivebox",
+                                    detail: daysGitHubDetail(item),
+                                    url: item.githubReady ? daysGitHubReleaseUrl(item.name) : nil)
+                    }
+                    if let id = item.youTubeId {
+                        DaysLinkRow(title: "YouTube",
+                                    icon: "play.rectangle",
+                                    detail: id,
+                                    url: daysYouTubeUrl(id))
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            if queue.items.isEmpty {
+                Text("No recordings yet")
+                    .foregroundStyle(.secondary)
+            }
+            Button {
+                daysOpenDriveFolder()
+            } label: {
+                Label("Open Days folder in Drive", systemImage: "folder")
+            }
+            Button {
+                daysOpenPlaylist()
+            } label: {
+                Label("Open YouTube playlist", systemImage: "list.and.film")
+            }
+            Link(destination: daysGitHubArchiveUrl) {
+                Label("Open GitHub archive", systemImage: "archivebox")
+            }
+        }
+    }
+}
+
+private struct DaysEffectiveSection: View {
+    @ObservedObject var stream: SettingsStream
+    @ObservedObject var database: Database
+
+    var body: some View {
+        let info = DaysCaptureInfo.shared.summary
+        Section {
+            LabeledContent("Camera format", value: info.format)
+            LabeledContent("Stabilization", value: info.stabilization)
+            LabeledContent("Video") {
+                Text("\(stream.codec == .h264avc ? "H.264" : "HEVC") \(stream.bitrate / 1_000_000) Mbps, "
+                    + "\(stream.maxKeyFrameInterval) s keyframes")
+            }
+            LabeledContent("Audio") {
+                Text("AAC \(stream.audioBitrate / 1000) kbps, "
+                    + "\(Int(AVAudioSession.sharedInstance().sampleRate / 1000)) kHz"
+                    + (database.audio.preferStereoMic ? ", stereo" : ""))
+            }
+        } header: {
+            Text("Effective capture")
+        } footer: {
+            if info.fellBack {
+                Text("The camera has no matching format; the default format is used.")
+            }
+        }
+    }
+}
+
 struct DaysSettingsView: View {
     @EnvironmentObject var model: Model
     @ObservedObject var database: Database
 
     var body: some View {
         Form {
+            TimelineView(.periodic(from: .now, by: 2)) { _ in
+                DaysNowRecordingSection(model: model, queue: daysQueue)
+            }
+            DaysQueueSection(queue: daysQueue)
             DaysAccountsSection(drive: driveStatus, github: githubStatus, model: model)
             TimelineView(.periodic(from: .now, by: 2)) { _ in
                 DaysStatusSection(model: model,
@@ -307,6 +479,9 @@ struct DaysSettingsView: View {
                                   overlay: model.streamOverlay)
             }
             DaysRecordingSection(model: model, database: database, stream: model.stream)
+            TimelineView(.periodic(from: .now, by: 2)) { _ in
+                DaysEffectiveSection(stream: model.stream, database: database)
+            }
             DaysUploadSection(model: model, recording: model.stream.recording, github: githubStatus)
             Section {
                 NavigationLink {
@@ -317,7 +492,7 @@ struct DaysSettingsView: View {
                 NavigationLink {
                     SettingsView(database: database)
                 } label: {
-                    Label("Advanced (Moblin)", systemImage: "gearshape.2")
+                    Label("Advanced", systemImage: "gearshape.2")
                 }
             }
         }

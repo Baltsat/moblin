@@ -8,61 +8,61 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         }
       }
@@ -74,61 +74,61 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         }
       }
@@ -138,13 +138,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin Einstellungen"
+            "value" : "Days Einstellungen"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 設定"
+            "value" : "Days 設定"
           }
         }
       }
@@ -156,13 +156,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin nutzt Apple Music, um Musik abzuspielen, während du streamst."
+            "value" : "Days nutzt Apple Music, um Musik abzuspielen, während du streamst."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin uses Apple Music to play music while you stream."
+            "value" : "Days uses Apple Music to play music while you stream."
           }
         }
       }
@@ -174,67 +174,67 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kommuniziert mit DJI-Kameras über Bluetooth."
+            "value" : "Days kommuniziert mit DJI-Kameras über Bluetooth."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin communicates with DJI cameras using Bluetooth."
+            "value" : "Days communicates with DJI cameras using Bluetooth."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin communique avec les caméras DJI par Bluetooth"
+            "value" : "Days communique avec les caméras DJI par Bluetooth"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin comunica con le fotocamere DJI tramite Bluetooth."
+            "value" : "Days comunica con le fotocamere DJI tramite Bluetooth."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin communiceert met DJI-camera's via Bluetooth."
+            "value" : "Days communiceert met DJI-camera's via Bluetooth."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin komunikuje się z kamerami DJI przez Bluetooth"
+            "value" : "Days komunikuje się z kamerami DJI przez Bluetooth"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin использует Bluetooth для подключения к камерам DJI"
+            "value" : "Days использует Bluetooth для подключения к камерам DJI"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin Bluetooth'u DJI kameraları için kullanır."
+            "value" : "Days Bluetooth'u DJI kameraları için kullanır."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 使用藍芽與 DJI 設備進行連線"
+            "value" : "Days 使用藍芽與 DJI 設備進行連線"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 需使用藍牙與 DJI 相機進行通訊。"
+            "value" : "Days 需使用藍牙與 DJI 相機進行通訊。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin使用藍牙和DJI裝置進行通訊"
+            "value" : "Days使用藍牙和DJI裝置進行通訊"
           }
         }
       }
@@ -246,79 +246,79 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin streamt live Videos von der Kamera."
+            "value" : "Days streamt live Videos von der Kamera."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin live streams video from the camera."
+            "value" : "Days live streams video from the camera."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin transmite vídeo en directo desde la cámara"
+            "value" : "Days transmite vídeo en directo desde la cámara"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin utilise la caméra pour capter et diffuser de la vidéo."
+            "value" : "Days utilise la caméra pour capter et diffuser de la vidéo."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin trasmette in diretta il video della fotocamera."
+            "value" : "Days trasmette in diretta il video della fotocamera."
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin은 카메라에서 비디오를 실시간 스트리밍합니다."
+            "value" : "Days은 카메라에서 비디오를 실시간 스트리밍합니다."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin streamt live video van de camera."
+            "value" : "Days streamt live video van de camera."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin stremuje live z kamery"
+            "value" : "Days stremuje live z kamery"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin транслирует видео с камеры"
+            "value" : "Days транслирует видео с камеры"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin yayın yaparken kameranızı kullanır."
+            "value" : "Days yayın yaparken kameranızı kullanır."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 串流影像來自相機。"
+            "value" : "Days 串流影像來自相機。"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 實況畫面來自相機。"
+            "value" : "Days 實況畫面來自相機。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin直播畫面來自鏡頭"
+            "value" : "Days直播畫面來自鏡頭"
           }
         }
       }
@@ -330,61 +330,61 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kann deine Herzfrequenz im Stream anzeigen."
+            "value" : "Days kann deine Herzfrequenz im Stream anzeigen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin can show your heart rate on stream."
+            "value" : "Days can show your heart rate on stream."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin peut afficher votre fréquence cardiaque sur le stream."
+            "value" : "Days peut afficher votre fréquence cardiaque sur le stream."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin può mostrare la tua frequenza cardiaca in diretta."
+            "value" : "Days può mostrare la tua frequenza cardiaca in diretta."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kan je hartslag weergeven in de stream."
+            "value" : "Days kan je hartslag weergeven in de stream."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin może pokazać twoje tętno podczas streamu."
+            "value" : "Days może pokazać twoje tętno podczas streamu."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin yayınınızda kalp atış hızınızı gösterebilir."
+            "value" : "Days yayınınızda kalp atış hızınızı gösterebilir."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以把你的心率顯示在實況上"
+            "value" : "Days 可以把你的心率顯示在實況上"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以在實況時顯示您的心率。"
+            "value" : "Days 可以在實況時顯示您的心率。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin能夠在直播顯示你的心跳率"
+            "value" : "Days能夠在直播顯示你的心跳率"
           }
         }
       }
@@ -396,61 +396,61 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kann deine Herzfrequenz im Stream anzeigen."
+            "value" : "Days kann deine Herzfrequenz im Stream anzeigen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin can show your heart rate on stream."
+            "value" : "Days can show your heart rate on stream."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin peut afficher votre fréquence cardiaque sur le stream"
+            "value" : "Days peut afficher votre fréquence cardiaque sur le stream"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin può mostrare la tua frequenza cardiaca in diretta."
+            "value" : "Days può mostrare la tua frequenza cardiaca in diretta."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kan je hartslag weergeven in de stream."
+            "value" : "Days kan je hartslag weergeven in de stream."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin może pokazać twoje tętno podczas streamu."
+            "value" : "Days może pokazać twoje tętno podczas streamu."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin yayınınızda kalp atış hızınızı gösterebilir."
+            "value" : "Days yayınınızda kalp atış hızınızı gösterebilir."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以把你的心率顯示在實況上"
+            "value" : "Days 可以把你的心率顯示在實況上"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以在實況時顯示您的心率。"
+            "value" : "Days 可以在實況時顯示您的心率。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin能夠在直播顯示你的心跳率"
+            "value" : "Days能夠在直播顯示你的心跳率"
           }
         }
       }
@@ -462,61 +462,61 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kann deine Herzfrequenz im Stream anzeigen."
+            "value" : "Days kann deine Herzfrequenz im Stream anzeigen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin can show your heart rate on stream."
+            "value" : "Days can show your heart rate on stream."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin peut afficher votre fréquence cardiaque sur le stream"
+            "value" : "Days peut afficher votre fréquence cardiaque sur le stream"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin può mostrare la tua frequenza cardiaca in diretta."
+            "value" : "Days può mostrare la tua frequenza cardiaca in diretta."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kan je hartslag weergeven in de stream."
+            "value" : "Days kan je hartslag weergeven in de stream."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin może pokazać twoje tętno podczas streamu."
+            "value" : "Days może pokazać twoje tętno podczas streamu."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin yayınınızda kalp atış hızınızı gösterebilir."
+            "value" : "Days yayınınızda kalp atış hızınızı gösterebilir."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以把你的心率顯示在實況上"
+            "value" : "Days 可以把你的心率顯示在實況上"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以在實況時顯示您的心率。"
+            "value" : "Days 可以在實況時顯示您的心率。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin能夠在直播顯示你的心跳率"
+            "value" : "Days能夠在直播顯示你的心跳率"
           }
         }
       }
@@ -528,79 +528,79 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin verwendet Localhost als Eingabe und Ausgabe für die SRT-Bibliothek."
+            "value" : "Days verwendet Localhost als Eingabe und Ausgabe für die SRT-Bibliothek."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin uses localhost as input and output to SRT library."
+            "value" : "Days uses localhost as input and output to SRT library."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin utiliza localhost como entrada y salida a la librería SRT"
+            "value" : "Days utiliza localhost como entrada y salida a la librería SRT"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin doit devenir un serveur local pour la réception et l'envoi SRT."
+            "value" : "Days doit devenir un serveur local pour la réception et l'envoi SRT."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin utilizza localhost come input e output per la libreria SRT."
+            "value" : "Days utilizza localhost come input e output per la libreria SRT."
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin은 SRT 라이브러리에 대한 입력 및 출력으로 localhost를 사용합니다."
+            "value" : "Days은 SRT 라이브러리에 대한 입력 및 출력으로 localhost를 사용합니다."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin gebruikt localhost als invoer en uitvoer naar de SRT-bibliotheek."
+            "value" : "Days gebruikt localhost als invoer en uitvoer naar de SRT-bibliotheek."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin używa localhost jako wejście i wyjście użyte w połączeniach SRT"
+            "value" : "Days używa localhost jako wejście i wyjście użyte w połączeniach SRT"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin использует localhost для ввода и вывода в библиотеке SRT"
+            "value" : "Days использует localhost для ввода и вывода в библиотеке SRT"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin yerel ağı SRT kütüphanesi için kullanır."
+            "value" : "Days yerel ağı SRT kütüphanesi için kullanır."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 使用本地端作為 SRT 函式庫的輸入與輸出。"
+            "value" : "Days 使用本地端作為 SRT 函式庫的輸入與輸出。"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 使用本機作為輸入與輸出，連接到 SRT 函式庫。\nMoblin 將使用本機進行影音串流傳輸。"
+            "value" : "Days 使用本機作為輸入與輸出，連接到 SRT 函式庫。\nDays 將使用本機進行影音串流傳輸。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin使用localhost作為輸入及輸出到SRT程式庫"
+            "value" : "Days使用localhost作為輸入及輸出到SRT程式庫"
           }
         }
       }
@@ -612,19 +612,19 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kann deinen Standort und/oder deine Geschwindigkeit auf dem Bildschirm anzeigen und streamen."
+            "value" : "Days kann deinen Standort und/oder deine Geschwindigkeit auf dem Bildschirm anzeigen und streamen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin can display your location and/or speed on screen and stream."
+            "value" : "Days can display your location and/or speed on screen and stream."
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以在螢幕和串流畫面上顯示您的定位和/或速度。"
+            "value" : "Days 可以在螢幕和串流畫面上顯示您的定位和/或速度。"
           }
         }
       }
@@ -636,67 +636,67 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kann deinen Standort und/oder deine Geschwindigkeit auf dem Bildschirm anzeigen und streamen."
+            "value" : "Days kann deinen Standort und/oder deine Geschwindigkeit auf dem Bildschirm anzeigen und streamen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin can display your location and/or speed on screen and stream."
+            "value" : "Days can display your location and/or speed on screen and stream."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin peut afficher votre position et/ou votre vitesse sur l’écran et sur le stream."
+            "value" : "Days peut afficher votre position et/ou votre vitesse sur l’écran et sur le stream."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin può mostrare la tua posizione e/o velocità sullo schermo e in diretta."
+            "value" : "Days può mostrare la tua posizione e/o velocità sullo schermo e in diretta."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kan uw locatie en/of snelheid op het scherm weergeven en streamen."
+            "value" : "Days kan uw locatie en/of snelheid op het scherm weergeven en streamen."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin może pokazać twoją lokalizacje i/lub prędkość na ekranie i podczas streamu"
+            "value" : "Days może pokazać twoją lokalizacje i/lub prędkość na ekranie i podczas streamu"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin может отображать ваше местоположение и/или скорость на экране и на стриме."
+            "value" : "Days может отображать ваше местоположение и/или скорость на экране и на стриме."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin konumunuzu ve hızınızı yayınınızda gösterebilir."
+            "value" : "Days konumunuzu ve hızınızı yayınınızda gösterebilir."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以顯示你的位置、時速等資訊於實況畫面上。"
+            "value" : "Days 可以顯示你的位置、時速等資訊於實況畫面上。"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以在實況及畫面上顯示您的定位和移動速度。"
+            "value" : "Days 可以在實況及畫面上顯示您的定位和移動速度。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin能夠在畫面及直播中顯示你的定位或速度"
+            "value" : "Days能夠在畫面及直播中顯示你的定位或速度"
           }
         }
       }
@@ -708,79 +708,79 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin streamt live den Ton vom Mikrofon."
+            "value" : "Days streamt live den Ton vom Mikrofon."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin live streams audio from the microphone."
+            "value" : "Days live streams audio from the microphone."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin transmite en directo el audio del micrófono"
+            "value" : "Days transmite en directo el audio del micrófono"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin utilise le microphone pour capter l'audio à diffuser."
+            "value" : "Days utilise le microphone pour capter l'audio à diffuser."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin trasmette in diretta l'audio del microfono."
+            "value" : "Days trasmette in diretta l'audio del microfono."
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin은 마이크에서 오디오를 실시간 스트리밍합니다."
+            "value" : "Days은 마이크에서 오디오를 실시간 스트리밍합니다."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin streamt live audio via de microfoon."
+            "value" : "Days streamt live audio via de microfoon."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin może przekazywać dźwięk z milkrofonu"
+            "value" : "Days może przekazywać dźwięk z milkrofonu"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin транслирует аудио с микрофона."
+            "value" : "Days транслирует аудио с микрофона."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin yayın yaparken mikrofonunuzu kullanır."
+            "value" : "Days yayın yaparken mikrofonunuzu kullanır."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 串流音源來自麥克風。"
+            "value" : "Days 串流音源來自麥克風。"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 透過麥克風音訊進行實況。"
+            "value" : "Days 透過麥克風音訊進行實況。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin直播音訊來自麥克風"
+            "value" : "Days直播音訊來自麥克風"
           }
         }
       }
@@ -792,79 +792,79 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin zeigt ausgewählte Bilder als Overlays an."
+            "value" : "Days zeigt ausgewählte Bilder als Overlays an."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin shows selected images as overlays."
+            "value" : "Days shows selected images as overlays."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin muestra las imágenes seleccionadas en el overlay"
+            "value" : "Days muestra las imágenes seleccionadas en el overlay"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin accède à la bibliothèque pour afficher des images stockées localement."
+            "value" : "Days accède à la bibliothèque pour afficher des images stockées localement."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin mostra le immagini selezionate come overlay."
+            "value" : "Days mostra le immagini selezionate come overlay."
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin은 선택한 이미지를 오버레이로 표시합니다."
+            "value" : "Days은 선택한 이미지를 오버레이로 표시합니다."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin toont geselecteerde afbeeldingen als overlays."
+            "value" : "Days toont geselecteerde afbeeldingen als overlays."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin pokazuje wybrane obrazy jako warstwy"
+            "value" : "Days pokazuje wybrane obrazy jako warstwy"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin отображает выбранные изображения как оверлеи."
+            "value" : "Days отображает выбранные изображения как оверлеи."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin seçilen görüntüleri üst üste yerleştirir."
+            "value" : "Days seçilen görüntüleri üst üste yerleştirir."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 顯示所選圖片為圖層。"
+            "value" : "Days 顯示所選圖片為圖層。"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 將選定圖片用懸浮顯示。"
+            "value" : "Days 將選定圖片用懸浮顯示。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin能夠將圖片作為圖層顯示"
+            "value" : "Days能夠將圖片作為圖層顯示"
           }
         }
       }
@@ -876,79 +876,79 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin zeigt ausgewählte Bilder als Overlays an."
+            "value" : "Days zeigt ausgewählte Bilder als Overlays an."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin shows selected images as overlays."
+            "value" : "Days shows selected images as overlays."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin muestra las imágenes seleccionadas en el overlay"
+            "value" : "Days muestra las imágenes seleccionadas en el overlay"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin affiche les images sélectionnés en calques dans la vue."
+            "value" : "Days affiche les images sélectionnés en calques dans la vue."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin mostra le immagini selezionate come overlay."
+            "value" : "Days mostra le immagini selezionate come overlay."
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin은 선택한 이미지를 오버레이로 표시합니다."
+            "value" : "Days은 선택한 이미지를 오버레이로 표시합니다."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin toont geselecteerde afbeeldingen als overlays."
+            "value" : "Days toont geselecteerde afbeeldingen als overlays."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin pokazuje wybrane obrazy jako warstwy"
+            "value" : "Days pokazuje wybrane obrazy jako warstwy"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin отображает выбранные изображения как оверлеи."
+            "value" : "Days отображает выбранные изображения как оверлеи."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin seçilen görüntüleri üst üste yerleştirir."
+            "value" : "Days seçilen görüntüleri üst üste yerleştirir."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 顯示所選圖片為圖層。"
+            "value" : "Days 顯示所選圖片為圖層。"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 將選定圖片用懸浮顯示。"
+            "value" : "Days 將選定圖片用懸浮顯示。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin能夠將圖片作為圖層顯示"
+            "value" : "Days能夠將圖片作為圖層顯示"
           }
         }
       }
@@ -960,61 +960,61 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kann dem Stream eine Transkription hinzufügen."
+            "value" : "Days kann dem Stream eine Transkription hinzufügen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin can add transcription to the stream."
+            "value" : "Days can add transcription to the stream."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin peut ajouter la transcription au stream"
+            "value" : "Days peut ajouter la transcription au stream"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin può aggiungere la trascrizione allo stream."
+            "value" : "Days può aggiungere la trascrizione allo stream."
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kan transcriptie aan de stream toevoegen."
+            "value" : "Days kan transcriptie aan de stream toevoegen."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin może transkrybować stream"
+            "value" : "Days może transkrybować stream"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin yayınınızda altyazı ekleyebilir."
+            "value" : "Days yayınınızda altyazı ekleyebilir."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以增加轉場到實況中"
+            "value" : "Days 可以增加轉場到實況中"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以將語音自動轉成文字顯示於實況。"
+            "value" : "Days 可以將語音自動轉成文字顯示於實況。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin能夠在直播加入文字轉錄"
+            "value" : "Days能夠在直播加入文字轉錄"
           }
         }
       }

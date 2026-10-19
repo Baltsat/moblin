@@ -8,19 +8,19 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin Live Aktivität"
+            "value" : "Days Live Aktivität"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin Live Activity"
+            "value" : "Days Live Activity"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 即時動態"
+            "value" : "Days 即時動態"
           }
         }
       }
@@ -32,19 +32,19 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MoblinLiveAktivität"
+            "value" : "DaysLiveAktivität"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "MoblinLiveActivity"
+            "value" : "DaysLiveActivity"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin即時動態"
+            "value" : "Days即時動態"
           }
         }
       }

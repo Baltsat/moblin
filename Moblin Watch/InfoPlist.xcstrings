@@ -8,43 +8,43 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "sv" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         }
       }
@@ -110,55 +110,55 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kann deine Herzfrequenz im Stream anzeigen."
+            "value" : "Days kann deine Herzfrequenz im Stream anzeigen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin can show your heart rate on stream."
+            "value" : "Days can show your heart rate on stream."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin peut afficher votre fréquence cardiaque sur le stream"
+            "value" : "Days peut afficher votre fréquence cardiaque sur le stream"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kan je hartslag op je stream laten zien."
+            "value" : "Days kan je hartslag op je stream laten zien."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin może pokazać twoje tętno podczas streamu."
+            "value" : "Days może pokazać twoje tętno podczas streamu."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin yayınınızda kalp atış hızınızı gösterebilir."
+            "value" : "Days yayınınızda kalp atış hızınızı gösterebilir."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以把你的心率顯示在實況上"
+            "value" : "Days 可以把你的心率顯示在實況上"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以在實況時顯示您的心率。"
+            "value" : "Days 可以在實況時顯示您的心率。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin能夠在直播顯示你的心跳率"
+            "value" : "Days能夠在直播顯示你的心跳率"
           }
         }
       }
@@ -170,55 +170,55 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kann deine Herzfrequenz im Stream anzeigen."
+            "value" : "Days kann deine Herzfrequenz im Stream anzeigen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin can show your heart rate on stream."
+            "value" : "Days can show your heart rate on stream."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin peut afficher votre fréquence cardiaque sur le stream"
+            "value" : "Days peut afficher votre fréquence cardiaque sur le stream"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kan je hartslag op je stream laten zien."
+            "value" : "Days kan je hartslag op je stream laten zien."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin może pokazać twoje tętno podczas streamu."
+            "value" : "Days może pokazać twoje tętno podczas streamu."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin yayınınızda kalp atış hızınızı gösterebilir."
+            "value" : "Days yayınınızda kalp atış hızınızı gösterebilir."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以把你的心率顯示在實況上"
+            "value" : "Days 可以把你的心率顯示在實況上"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以在實況時顯示您的心率。"
+            "value" : "Days 可以在實況時顯示您的心率。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin能夠在直播顯示你的心跳率"
+            "value" : "Days能夠在直播顯示你的心跳率"
           }
         }
       }
@@ -230,55 +230,55 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kann deine Herzfrequenz im Stream anzeigen."
+            "value" : "Days kann deine Herzfrequenz im Stream anzeigen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin can show your heart rate on stream."
+            "value" : "Days can show your heart rate on stream."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin peut afficher votre fréquence cardiaque sur le stream"
+            "value" : "Days peut afficher votre fréquence cardiaque sur le stream"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin kan je hartslag op je stream laten zien."
+            "value" : "Days kan je hartslag op je stream laten zien."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin może pokazać twoje tętno podczas streamu."
+            "value" : "Days może pokazać twoje tętno podczas streamu."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin yayınınızda kalp atış hızınızı gösterebilir."
+            "value" : "Days yayınınızda kalp atış hızınızı gösterebilir."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以把你的心率顯示在實況上"
+            "value" : "Days 可以把你的心率顯示在實況上"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 可以在實況時顯示您的心率。"
+            "value" : "Days 可以在實況時顯示您的心率。"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin能夠在直播顯示你的心跳率"
+            "value" : "Days能夠在直播顯示你的心跳率"
           }
         }
       }

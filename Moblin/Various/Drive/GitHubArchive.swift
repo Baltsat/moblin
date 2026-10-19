@@ -126,6 +126,7 @@ private actor GitHubEngine {
             jobs.append(GitHubJob(tag: tag, localPath: localPath))
             save()
         }
+        daysQueueUpdate(tag) { $0.githubQueued = true }
         publish()
         wake()
         return true
@@ -227,9 +228,20 @@ private actor GitHubEngine {
             return
         }
         let assets = try await listAssets(releaseId)
-        for item in try items(job) where !(jobs.first { $0.tag == tag }?.done.contains(item.name) ?? true) {
+        let allItems = try items(job)
+        let total = allItems.count
+        let doneNow = jobs.first { $0.tag == tag }?.done.count ?? 0
+        daysQueueUpdate(tag) {
+            $0.githubQueued = true
+            $0.githubReady = true
+            $0.githubTotal = total
+            $0.githubDone = doneNow
+        }
+        for item in allItems where !(jobs.first { $0.tag == tag }?.done.contains(item.name) ?? true) {
             try await upload(item, to: uploadUrl, existing: assets[item.name], tag: tag)
             update(tag) { $0.done.append(item.name) }
+            let count = jobs.first { $0.tag == tag }?.done.count ?? 0
+            daysQueueUpdate(tag) { $0.githubDone = count }
         }
         try? FileManager.default.removeItem(at: sidecarUrl(tag))
         if let path = job.localPath {
@@ -238,6 +250,11 @@ private actor GitHubEngine {
         jobs.removeAll { $0.tag == tag }
         save()
         publish()
+        daysQueueUpdate(tag) {
+            $0.githubReady = true
+            $0.githubFinished = true
+            $0.githubDone = $0.githubTotal
+        }
         status("Archived \(tag)")
         DispatchQueue.main.async {
             MainActor.assumeIsolated {

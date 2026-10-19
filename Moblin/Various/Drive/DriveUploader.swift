@@ -268,6 +268,7 @@ private actor DriveEngine {
         session.save()
         sessions[name] = session
         current = session
+        daysQueueUpdate(name, startMs: session.manifest.startMs) { _ in }
         wake()
     }
 
@@ -469,11 +470,13 @@ private actor DriveEngine {
         case let .incomplete(next):
             session.manifest.acked = next
             session.pruneParts()
+            updateStatus()
             return false
         case let .complete(fileId):
             session.manifest.videoFileId = fileId
             session.manifest.acked = session.manifest.bytesTotal
             session.save()
+            daysQueueUpdate(session.manifest.name, startMs: session.manifest.startMs) { $0.driveFileId = fileId }
             try await finish(session)
             return true
         }
@@ -483,6 +486,14 @@ private actor DriveEngine {
         try await syncSidecar(session, force: true)
         session.manifest.done = true
         session.save()
+        let fileId = session.manifest.videoFileId
+        let totalBytes = session.manifest.bytesTotal
+        daysQueueUpdate(session.manifest.name, startMs: session.manifest.startMs) {
+            $0.driveDone = true
+            $0.driveFileId = fileId
+            $0.driveAcked = totalBytes
+            $0.driveTotal = totalBytes
+        }
         logger.info("drive: Uploaded \(session.manifest.name) (\(session.manifest.bytesTotal) bytes)")
         if let localPath = session.manifest.info.localPath {
             if githubAuth.isSignedIn, DaysPrefs.isGitHubArchive,
@@ -512,6 +523,7 @@ private actor DriveEngine {
         let dais = try await api.findOrCreateFolder(name: driveRootFolderName, parentId: "root")
         let phone = try await api.findOrCreateFolder(name: drivePhoneFolderName, parentId: dais)
         folderId = phone
+        daysSaveFolderIds(root: dais, phone: phone)
         return phone
     }
 
@@ -590,6 +602,11 @@ private actor DriveEngine {
             let total = session.manifest.closed
                 ? session.manifest.bytesTotal
                 : Int64(session.tailIndex * drivePartSize + session.buffer.count)
+            let acked = session.manifest.acked
+            daysQueueUpdate(session.manifest.name, startMs: session.manifest.startMs) {
+                $0.driveAcked = acked
+                $0.driveTotal = total
+            }
             queued += total - session.manifest.acked
         }
         let count = pending.count

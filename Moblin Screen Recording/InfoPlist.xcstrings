@@ -8,37 +8,37 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin"
+            "value" : "Days"
           }
         }
       }
@@ -50,43 +50,43 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin Bildschirmaufnahme"
+            "value" : "Days Bildschirmaufnahme"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin Screen Recording"
+            "value" : "Days Screen Recording"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Registrazione schermo Moblin"
+            "value" : "Registrazione schermo Days"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin scherm opname"
+            "value" : "Days scherm opname"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 螢幕錄製"
+            "value" : "Days 螢幕錄製"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 螢幕錄製"
+            "value" : "Days 螢幕錄製"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin螢幕擷取"
+            "value" : "Days螢幕擷取"
           }
         }
       }

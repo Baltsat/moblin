@@ -8,43 +8,43 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin Widget"
+            "value" : "Days Widget"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Moblin Widget"
+            "value" : "Days Widget"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Widget Moblin"
+            "value" : "Widget Days"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin Widget"
+            "value" : "Days Widget"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 小工具"
+            "value" : "Days 小工具"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 小工具"
+            "value" : "Days 小工具"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin小工具"
+            "value" : "Days小工具"
           }
         }
       }
@@ -56,43 +56,43 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin Widget"
+            "value" : "Days Widget"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "MoblinWidget"
+            "value" : "DaysWidget"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MoblinWidget"
+            "value" : "DaysWidget"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MoblinWidget"
+            "value" : "DaysWidget"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 小工具"
+            "value" : "Days 小工具"
           }
         },
         "zh-Hant-TW" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin 小工具"
+            "value" : "Days 小工具"
           }
         },
         "zh-HK" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Moblin小工具"
+            "value" : "Days小工具"
           }
         }
       }

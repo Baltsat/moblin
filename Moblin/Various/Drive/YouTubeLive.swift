@@ -130,8 +130,9 @@ private func youTubeComplete(_ id: String) async {
     } catch {}
 }
 
-private func youTubeAddToPlaylist(videoId: String, token: String, cellular: Bool) async throws {
-    let title = "Days \u{00B7} phone"
+private let youTubePlaylistTitle = "Days \u{00B7} phone"
+
+private func youTubeFindPlaylist(token: String, cellular: Bool, create: Bool) async throws -> String? {
     var playlistId: String?
     var page: String?
     repeat {
@@ -142,20 +143,40 @@ private func youTubeAddToPlaylist(videoId: String, token: String, cellular: Bool
         let result = try await youTubeRequest(method: "GET", path: "playlists", query: query,
                                               body: nil, token: token, cellular: cellular)
         let items = result["items"] as? [[String: Any]] ?? []
-        playlistId = items.first { ($0["snippet"] as? [String: Any])?["title"] as? String == title }?["id"] as? String
+        playlistId = items.first {
+            ($0["snippet"] as? [String: Any])?["title"] as? String == youTubePlaylistTitle
+        }?["id"] as? String
         page = result["nextPageToken"] as? String
     } while playlistId == nil && page != nil
-    if playlistId == nil {
+    if playlistId == nil, create {
         let created = try await youTubeRequest(
             method: "POST",
             path: "playlists",
             query: ["part": "snippet,status"],
-            body: ["snippet": ["title": title], "status": ["privacyStatus": "private"]],
+            body: ["snippet": ["title": youTubePlaylistTitle], "status": ["privacyStatus": "private"]],
             token: token,
             cellular: cellular
         )
         playlistId = created["id"] as? String
     }
+    if let playlistId {
+        UserDefaults.standard.set(playlistId, forKey: daysPlaylistKey)
+    }
+    return playlistId
+}
+
+func youTubeResolvePlaylistId() async -> String? {
+    if let id = UserDefaults.standard.string(forKey: daysPlaylistKey) {
+        return id
+    }
+    guard let token = try? await driveAuth.accessToken() else {
+        return nil
+    }
+    return try? await youTubeFindPlaylist(token: token, cellular: true, create: false)
+}
+
+private func youTubeAddToPlaylist(videoId: String, token: String, cellular: Bool) async throws {
+    let playlistId = try await youTubeFindPlaylist(token: token, cellular: cellular, create: true)
     guard let playlistId else {
         return
     }
@@ -248,6 +269,19 @@ extension Model {
         }
     }
 
+    func youTubeLiveState() -> (id: String?, state: String)? {
+        guard isRecording, UserDefaults.standard.object(forKey: youTubeEnabledKey) as? Bool ?? true else {
+            return nil
+        }
+        if let session = youTubeSession {
+            if !youTubeStreaming {
+                return (session.broadcastId, "paused")
+            }
+            return (session.broadcastId, isStreamConnected() ? "live" : "reconnecting")
+        }
+        return (nil, DaysNet.shared.canStream(cellular: youTubeCellularAllowed()) ? "starting" : "offline-queued")
+    }
+
     func completePendingYouTube() {
         daysModel = self
         _ = daysPathObserverRegistered
@@ -296,6 +330,7 @@ extension Model {
                 return
             }
             youTubeSession = YouTubeSession(broadcastId: prepared.broadcastId, url: prepared.url)
+            daysQueue.attachYouTube(prepared.broadcastId)
             stream.url = prepared.url
             youTubeStreaming = true
             startStream()
