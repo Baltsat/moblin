@@ -7,6 +7,7 @@ struct DaysQueueItem: Codable, Identifiable, Sendable {
     var driveAcked: Int64 = 0
     var driveTotal: Int64 = 0
     var driveFileId: String?
+    var driveFolderId: String?
     var driveDone = false
     var githubQueued = false
     var githubReady = false
@@ -24,6 +25,7 @@ struct DaysQueueItem: Codable, Identifiable, Sendable {
     }
 }
 
+let daysDefaultRootFolderId = "1AXpuUcq_s9MmOuS1WVFtSYS-ImNcAThb"
 private let daysQueueKey = "daysQueueItems"
 private let daysRootFolderKey = "daysDriveRootFolderId"
 private let daysPhoneFolderKey = "daysDrivePhoneFolderId"
@@ -48,6 +50,10 @@ final class DaysQueue: ObservableObject {
 
     var phoneFolderId: String? {
         UserDefaults.standard.string(forKey: daysPhoneFolderKey)
+    }
+
+    func folderUrl(_ item: DaysQueueItem) -> URL? {
+        daysDriveFolderUrl(item.driveFolderId ?? rootFolderId ?? daysDefaultRootFolderId)
     }
 
     func apply(_ name: String, startMs: Int64?, _ change: (inout DaysQueueItem) -> Void) {
@@ -120,7 +126,7 @@ let daysGitHubArchiveUrl = URL(string: "https://github.com/balkonsta/days-archiv
 @MainActor
 func daysOpenDriveFolder() {
     Task {
-        var id = daysQueue.rootFolderId
+        var id = daysQueue.rootFolderId ?? Optional(daysDefaultRootFolderId)
         if id == nil {
             id = try? await DriveApi().findOrCreateFolder(name: "Days", parentId: "root")
             if let id {

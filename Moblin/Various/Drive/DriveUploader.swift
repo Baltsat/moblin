@@ -191,7 +191,7 @@ private actor DriveEngine {
     private var current: DriveSession?
     private var sessions: [String: DriveSession] = [:]
     private var failures = 0
-    private var folderId: String?
+    private var folderIds: [String: String] = [:]
     private let wakeStream: AsyncStream<Void>
     private let wakeContinuation: AsyncStream<Void>.Continuation
 
@@ -405,8 +405,9 @@ private actor DriveEngine {
             throw DriveError.notSignedIn
         }
         if session.manifest.uploadUrl == nil {
-            let folder = try await ensureFolder()
+            let folder = try await ensureFolder(name: session.manifest.name)
             session.manifest.folderId = folder
+            daysQueueUpdate(session.manifest.name, startMs: session.manifest.startMs) { $0.driveFolderId = folder }
             session.manifest.uploadUrl = try await api.startResumable(
                 name: "\(session.manifest.name).mp4",
                 folderId: folder,
@@ -516,15 +517,33 @@ private actor DriveEngine {
         wake()
     }
 
-    private func ensureFolder() async throws -> String {
-        if let folderId {
-            return folderId
+    private func ensureFolder(name: String) async throws -> String {
+        let day = String(name.prefix(10)).split(separator: "-").map(String.init)
+        guard day.count == 3 else {
+            return try await ensureFolderPath(["phone"])
         }
-        let dais = try await api.findOrCreateFolder(name: driveRootFolderName, parentId: "root")
-        let phone = try await api.findOrCreateFolder(name: drivePhoneFolderName, parentId: dais)
-        folderId = phone
-        daysSaveFolderIds(root: dais, phone: phone)
-        return phone
+        return try await ensureFolderPath([day[0], day[1], day[2], drivePhoneFolderName])
+    }
+
+    private func ensureFolderPath(_ parts: [String]) async throws -> String {
+        let dais = try await cachedFolder(key: "", name: driveRootFolderName, parent: "root")
+        var parent = dais
+        var key = ""
+        for part in parts {
+            key += "/" + part
+            parent = try await cachedFolder(key: key, name: part, parent: parent)
+        }
+        daysSaveFolderIds(root: dais, phone: parent)
+        return parent
+    }
+
+    private func cachedFolder(key: String, name: String, parent: String) async throws -> String {
+        if let id = folderIds[key] {
+            return id
+        }
+        let id = try await api.findOrCreateFolder(name: name, parentId: parent)
+        folderIds[key] = id
+        return id
     }
 
     private func sidecarData(_ session: DriveSession) throws -> Data {

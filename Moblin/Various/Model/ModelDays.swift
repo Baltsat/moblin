@@ -28,6 +28,7 @@ extension Model {
             UserDefaults.standard.set(true, forKey: lowLightKey)
         }
         applyDaysCaptureMigration()
+        applyDaysBitrateMigration()
         applyDaysPendingPreset()
     }
 
@@ -121,11 +122,11 @@ enum DaysPreset: String, CaseIterable {
     var values: Values {
         switch self {
         case .allDay:
-            Values(resolution: .r1920x1080, fps: 30, streamBitrate: 6_000_000,
-                   recordingCodec: .h264avc, recordingBitrate: 6_000_000)
+            Values(resolution: .r1920x1080, fps: 30, streamBitrate: 10_000_000,
+                   recordingCodec: .h264avc, recordingBitrate: 10_000_000)
         case .smooth:
-            Values(resolution: .r1920x1080, fps: 60, streamBitrate: 8_000_000,
-                   recordingCodec: .h264avc, recordingBitrate: 8_000_000)
+            Values(resolution: .r1920x1080, fps: 60, streamBitrate: 12_000_000,
+                   recordingCodec: .h264avc, recordingBitrate: 12_000_000)
         case .max:
             Values(resolution: .r3840x2160, fps: 30, streamBitrate: 35_000_000,
                    recordingCodec: .h265hevc, recordingBitrate: 30_000_000)
@@ -224,6 +225,15 @@ extension Model {
         }
         DaysPreset.set(.allDay)
         daysApplyPreset(.allDay, reload: false)
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    fileprivate func applyDaysBitrateMigration() {
+        let key = "daysBitrateMigration5"
+        guard !UserDefaults.standard.bool(forKey: key) else {
+            return
+        }
+        daysApplyPreset(DaysPreset.current, reload: false)
         UserDefaults.standard.set(true, forKey: key)
     }
 }

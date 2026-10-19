@@ -243,6 +243,7 @@ private actor GitHubEngine {
             let count = jobs.first { $0.tag == tag }?.done.count ?? 0
             daysQueueUpdate(tag) { $0.githubDone = count }
         }
+        try await writeIndex(tag: tag, items: allItems)
         try? FileManager.default.removeItem(at: sidecarUrl(tag))
         if let path = job.localPath {
             try? FileManager.default.removeItem(atPath: path)
@@ -261,6 +262,66 @@ private actor GitHubEngine {
                 daysNetStatus.markSynced()
             }
         }
+    }
+
+    private func writeIndex(tag: String, items: [GitHubItem]) async throws {
+        let sidecarData = (try? Data(contentsOf: sidecarUrl(tag))) ?? Data()
+        let object = (try? JSONSerialization.jsonObject(with: sidecarData) as? [String: Any]) ?? [:]
+        let startMs = (object["startMs"] as? NSNumber)?.int64Value
+        let endMs = (object["endMs"] as? NSNumber)?.int64Value
+        let bytes = (object["bytes"] as? NSNumber)?.int64Value
+            ?? items.filter { !$0.name.hasSuffix(".json") }.reduce(0) { $0 + $1.length }
+        let parts = tag.prefix(10).split(separator: "-")
+        guard parts.count == 3 else {
+            return
+        }
+        let path = "\(parts[0])/\(parts[1])/\(parts[2])/phone/\(tag).md"
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(identifier: "Asia/Makassar")
+        func time(_ ms: Int64?) -> String {
+            ms.map { formatter.string(from: Date(timeIntervalSince1970: Double($0) / 1000)) } ?? "unknown"
+        }
+        var duration = "unknown"
+        if let startMs, let endMs, endMs >= startMs {
+            let seconds = Int((endMs - startMs) / 1000)
+            duration = String(format: "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+        }
+        var lines = [
+            "# \(tag)",
+            "",
+            "- Start: \(time(startMs))",
+            "- End: \(time(endMs))",
+            "- Duration: \(duration)",
+            "- Size: \(String(format: "%.2f", Double(bytes) / 1e9)) GB (\(bytes) bytes)",
+            "- Release: https://github.com/\(githubRepo)/releases/tag/\(tag)",
+            "",
+            "## Assets",
+            "",
+        ]
+        for item in items {
+            lines.append("- [\(item.name)](https://github.com/\(githubRepo)/releases/download/\(tag)/\(item.name))")
+        }
+        lines += ["", "## Sidecar", "", "```json", String(decoding: sidecarData, as: UTF8.self), "```", ""]
+        let content = Data(lines.joined(separator: "\n").utf8).base64EncodedString()
+        let url = "https://api.github.com/repos/\(githubRepo)/contents/\(path)"
+        var body: [String: Any] = ["message": "Index \(tag)", "content": content]
+        var (code, data) = try await request("PUT", url, json: body)
+        if code == 422 || code == 409 {
+            let (getCode, getData) = try await request("GET", url)
+            if getCode == 200,
+               let sha = (try? JSONSerialization.jsonObject(with: getData) as? [String: Any])?["sha"] as? String
+            {
+                body["sha"] = sha
+                (code, data) = try await request("PUT", url, json: body)
+            }
+        }
+        if (200 ... 201).contains(code) {
+            return
+        }
+        if code == 403 || code == 429 || code == 408 || code >= 500 {
+            throw GitHubError.retryable("index \(code)")
+        }
+        logger.info("github: Index write failed \(code) \(text(data))")
     }
 
     private func items(_ job: GitHubJob) throws -> [GitHubItem] {

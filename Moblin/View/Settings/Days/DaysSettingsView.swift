@@ -406,7 +406,7 @@ private struct DaysNowRecordingSection: View {
                 }
                 if let item {
                     let fileUrl = item.driveFileId.flatMap { daysDriveFileUrl($0) }
-                        ?? queue.phoneFolderId.flatMap { daysDriveFolderUrl($0) }
+                        ?? queue.folderUrl(item)
                     DaysLinkRow(title: "Google Drive",
                                 icon: "externaldrive",
                                 detail: daysDriveDetail(item),
@@ -447,7 +447,7 @@ private struct DaysQueueSection: View {
                                 icon: "externaldrive",
                                 detail: daysDriveDetail(item),
                                 url: item.driveFileId.flatMap { daysDriveFileUrl($0) }
-                                    ?? queue.phoneFolderId.flatMap { daysDriveFolderUrl($0) })
+                                    ?? queue.folderUrl(item))
                     if item.githubQueued {
                         DaysLinkRow(title: "GitHub",
                                     icon: "archivebox",
