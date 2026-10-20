@@ -235,7 +235,11 @@ private struct YouTubeSession {
 @MainActor
 private var youTubeTask: Task<Void, Never>?
 @MainActor
-private var youTubeStreaming = false
+private var youTubeStreaming = false {
+    didSet {
+        DaysPace.setLive(youTubeStreaming)
+    }
+}
 @MainActor
 private var youTubeSession: YouTubeSession?
 @MainActor
@@ -296,6 +300,7 @@ extension Model {
                     daysQuietStop = false
                 } else if can, !youTubeStreaming, !isLive {
                     stream.url = session.url
+                    stream.rtmp.adaptiveBitrateEnabled = true
                     youTubeStreaming = true
                     startStream()
                 }
@@ -373,6 +378,7 @@ extension Model {
             youTubeSession = YouTubeSession(broadcastId: prepared.broadcastId, url: prepared.url)
             daysQueue.attachYouTube(prepared.broadcastId)
             stream.url = prepared.url
+            stream.rtmp.adaptiveBitrateEnabled = true
             youTubeStreaming = true
             startStream()
         }
