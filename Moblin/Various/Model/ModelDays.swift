@@ -50,7 +50,8 @@ extension Model {
             stream.resolution = values.resolution
             stream.fps = values.fps
             stream.codec = .h264avc
-            stream.bitrate = values.streamBitrate
+            stream.bitrate = min(values.streamBitrate, 6_000_000)
+            stream.rtmp.adaptiveBitrateEnabled = true
             stream.maxKeyFrameInterval = 2
             stream.audioCodec = .aac
             stream.audioBitrate = 192_000
@@ -264,7 +265,7 @@ extension Model {
     }
 
     fileprivate func applyDaysBitrateMigration() {
-        let key = "daysBitrateMigration7"
+        let key = "daysBitrateMigration8"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return
         }

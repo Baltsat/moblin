@@ -535,8 +535,8 @@ private struct DaysEffectiveSection: View {
         Section {
             LabeledContent("Camera format", value: info.format)
             LabeledContent("Stabilization", value: info.stabilization)
-            LabeledContent("Video") {
-                Text("\(stream.codec == .h264avc ? "H.264" : "HEVC") \(stream.bitrate / 1_000_000) Mbps, "
+            LabeledContent("Live stream (max)") {
+                Text("\(stream.codec == .h264avc ? "H.264" : "HEVC") \(stream.bitrate / 1_000_000) Mbps, adaptive, "
                     + "\(stream.maxKeyFrameInterval) s keyframes")
             }
             LabeledContent("Recording") {
