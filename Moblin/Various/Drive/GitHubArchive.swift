@@ -372,10 +372,14 @@ private actor GitHubEngine {
 
     private func send(_ request: URLRequest, file: URL? = nil) async throws -> (Int, Data) {
         do {
-            let (data, response) = if let file {
-                try await session.upload(for: request, fromFile: file)
+            let data: Data
+            let response: URLResponse
+            if let file {
+                (response, data) = try await DaysBackgroundUploader.shared.upload(
+                    request, file: file, wifiOnly: DaysPrefs.isWifiOnly, progress: nil
+                )
             } else {
-                try await session.data(for: request)
+                (data, response) = try await session.data(for: request)
             }
             guard let http = response as? HTTPURLResponse else {
                 throw GitHubError.retryable("no http response")

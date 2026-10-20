@@ -153,8 +153,8 @@ private struct DaysLockBadge: View {
 
     var body: some View {
         if camera.aeAfLocked {
-            Label("AE/AF lock", systemImage: "lock.fill")
-                .font(.caption.weight(.semibold))
+            Label("AE/AF LOCK", systemImage: "lock.fill")
+                .font(.subheadline.weight(.bold))
                 .foregroundStyle(.yellow)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)

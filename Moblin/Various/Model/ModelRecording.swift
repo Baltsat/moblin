@@ -74,6 +74,7 @@ extension Model {
             return
         }
         isRecorderRecording = true
+        daysLogRecordingStart()
         let bitrate = Int(stream.recording.videoBitrate)
         let keyFrameInterval = Int(stream.recording.maxKeyFrameInterval)
         let audioBitrate = Int(stream.recording.audioBitrate)

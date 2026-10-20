@@ -27,8 +27,11 @@ extension Model {
             }
             UserDefaults.standard.set(true, forKey: lowLightKey)
         }
+        DaysBackgroundUploader.shared.start()
         applyDaysCaptureMigration()
         applyDaysBitrateMigration()
+        applyDaysFocusMigration()
+        daysObserveSubjectArea()
         daysPickStereoMic()
         applyDaysPendingPreset()
     }
@@ -59,6 +62,7 @@ extension Model {
         }
         database.videoStabilizationMode = .standard
         database.audio.preferStereoMic = true
+        storeSettings()
         if reload, !isRecording, !isLive {
             reloadStreamIfEnabled(stream: stream)
             attachCamera()
@@ -139,11 +143,11 @@ enum DaysPreset: String, CaseIterable {
     var values: Values {
         switch self {
         case .allDay:
-            Values(resolution: .r1920x1080, fps: 30, streamBitrate: 10_000_000,
-                   recordingCodec: .h264avc, recordingBitrate: 10_000_000)
-        case .smooth:
-            Values(resolution: .r1920x1080, fps: 60, streamBitrate: 12_000_000,
+            Values(resolution: .r1920x1080, fps: 30, streamBitrate: 12_000_000,
                    recordingCodec: .h264avc, recordingBitrate: 12_000_000)
+        case .smooth:
+            Values(resolution: .r1920x1080, fps: 60, streamBitrate: 14_000_000,
+                   recordingCodec: .h264avc, recordingBitrate: 14_000_000)
         case .max:
             Values(resolution: .r3840x2160, fps: 30, streamBitrate: 35_000_000,
                    recordingCodec: .h265hevc, recordingBitrate: 30_000_000)
@@ -245,12 +249,87 @@ extension Model {
         UserDefaults.standard.set(true, forKey: key)
     }
 
+    fileprivate func applyDaysFocusMigration() {
+        let key = "daysFocusMigration1"
+        guard !UserDefaults.standard.bool(forKey: key) else {
+            return
+        }
+        database.tapToFocus = true
+        camera.lockedFocuses.removeAll()
+        camera.isFocusesLocked.removeAll()
+        camera.isFocusLocked = false
+        camera.aeAfLocked = false
+        storeSettings()
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     fileprivate func applyDaysBitrateMigration() {
-        let key = "daysBitrateMigration6"
+        let key = "daysBitrateMigration7"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return
         }
         daysApplyPreset(DaysPreset.current, reload: false)
+        storeSettings()
         UserDefaults.standard.set(true, forKey: key)
+    }
+}
+
+extension Model {
+    func daysObserveSubjectArea() {
+        NotificationCenter.default.addObserver(
+            forName: AVCaptureDevice.subjectAreaDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                guard let model = MoblinApp.globalModel,
+                      model.camera.manualFocusPoint != nil, !model.camera.aeAfLocked
+                else {
+                    return
+                }
+                model.setAutoFocus()
+            }
+        }
+    }
+
+    func daysLogRecordingStart() {
+        let recording = stream.recording
+        let resolution = recording.overrideStream ? recording.resolution : stream.resolution
+        let fps = recording.overrideStream ? recording.fps : stream.fps
+        let info = DaysCaptureInfo.shared.summary
+        let channels = media.getNumberOfAudioChannels()
+        logger.info("""
+        days: recording start \(resolution.shortString())\(fps) \
+        codec \(recording.videoCodec == .h265hevc ? "hevc" : "h264") \
+        recording \(recording.videoBitrate / 1000) kbps stream \(stream.bitrate / 1000) kbps \
+        override \(recording.overrideStream) audio \(recording.audioBitrate / 1000) kbps \(channels) ch \
+        camera \(info.format) stab \(info.stabilization)
+        """)
+    }
+}
+
+extension AVCaptureDevice {
+    func daysConfigureContinuousFocus() {
+        if isFocusModeSupported(.continuousAutoFocus) {
+            focusMode = .continuousAutoFocus
+        }
+        if isExposureModeSupported(.continuousAutoExposure) {
+            exposureMode = .continuousAutoExposure
+        }
+        if isFocusPointOfInterestSupported {
+            focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
+        }
+        if isExposurePointOfInterestSupported {
+            exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
+        }
+        if isAutoFocusRangeRestrictionSupported {
+            autoFocusRangeRestriction = .none
+        }
+        if isSmoothAutoFocusSupported {
+            isSmoothAutoFocusEnabled = false
+        }
+        automaticallyAdjustsFaceDrivenAutoFocusEnabled = true
+        automaticallyAdjustsFaceDrivenAutoExposureEnabled = true
+        isSubjectAreaChangeMonitoringEnabled = true
     }
 }

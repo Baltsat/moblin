@@ -38,14 +38,23 @@ final class DriveApi: Sendable {
     }
 
     private func send(_ request: URLRequest, body: Data?,
-                      progress: (@Sendable (Int64) -> Void)? = nil) async throws -> (HTTPURLResponse, Data) {
+                      progress: (@Sendable (Int64) -> Void)? = nil,
+                      background: Bool = false) async throws -> (HTTPURLResponse, Data) {
         var request = request
         request.setValue("Bearer \(try await driveAuth.accessToken())", forHTTPHeaderField: "Authorization")
         do {
-            let (data, response) = if let body {
-                try await session.upload(for: request, from: body, delegate: progress.map { DriveProgressDelegate($0) })
+            let data: Data
+            let response: URLResponse
+            if let body, background {
+                (response, data) = try await DaysBackgroundUploader.shared.upload(
+                    request, data: body, wifiOnly: DaysPrefs.isWifiOnly, progress: progress
+                )
+            } else if let body {
+                (data, response) = try await session.upload(
+                    for: request, from: body, delegate: progress.map { DriveProgressDelegate($0) }
+                )
             } else {
-                try await session.data(for: request)
+                (data, response) = try await session.data(for: request)
             }
             guard let response = response as? HTTPURLResponse else {
                 throw DriveError.retryable("no http response")
@@ -150,7 +159,7 @@ final class DriveApi: Sendable {
             let last = offset + Int64(data.count) - 1
             request.setValue("bytes \(offset)-\(last)/\(totalString)", forHTTPHeaderField: "Content-Range")
         }
-        let (response, responseData) = try await send(request, body: data, progress: progress)
+        let (response, responseData) = try await send(request, body: data, progress: progress, background: true)
         return try parseChunkResponse(response, responseData)
     }
 

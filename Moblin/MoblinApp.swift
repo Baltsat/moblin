@@ -126,6 +126,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     func application(_: UIApplication,
+                     handleEventsForBackgroundURLSession _: String,
+                     completionHandler: @escaping () -> Void)
+    {
+        DaysBackgroundUploader.shared.attach(completionHandler: completionHandler)
+    }
+
+    func application(_: UIApplication,
                      supportedInterfaceOrientationsFor _: UIWindow?) -> UIInterfaceOrientationMask
     {
         #if targetEnvironment(macCatalyst)

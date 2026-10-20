@@ -152,6 +152,7 @@ extension Model {
             device.focusMode = .autoFocus
             device.exposurePointOfInterest = focusPointOfInterest
             device.exposureMode = .autoExpose
+            device.isSubjectAreaChangeMonitoringEnabled = true
             device.unlockForConfiguration()
             camera.setManualFocusPoint(value: focusPoint)
             startMotionDetection()
@@ -170,10 +171,7 @@ extension Model {
         }
         do {
             try device.lockForConfiguration()
-            device.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
-            device.focusMode = .continuousAutoFocus
-            device.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
-            device.exposureMode = .continuousAutoExposure
+            device.daysConfigureContinuousFocus()
             device.unlockForConfiguration()
             camera.setManualFocusPoint(value: nil)
         } catch let error as NSError {
@@ -240,9 +238,7 @@ extension Model {
         }
         camera.lockedFocus = camera.lockedFocuses[device] ?? device.lensPosition
         camera.isFocusLocked = camera.isFocusesLocked[device] ?? false
-        if !camera.isFocusLocked {
-            setAutoFocus()
-        }
+        setAutoFocus()
         if camera.focusObservation != nil {
             stopObservingFocus()
             startObservingFocus()

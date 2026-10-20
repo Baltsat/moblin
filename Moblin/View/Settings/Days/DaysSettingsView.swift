@@ -539,6 +539,10 @@ private struct DaysEffectiveSection: View {
                 Text("\(stream.codec == .h264avc ? "H.264" : "HEVC") \(stream.bitrate / 1_000_000) Mbps, "
                     + "\(stream.maxKeyFrameInterval) s keyframes")
             }
+            LabeledContent("Recording") {
+                Text("\(stream.recording.videoCodec == .h264avc ? "H.264" : "HEVC") "
+                    + "\(stream.recording.videoBitrate / 1_000_000) Mbps")
+            }
             LabeledContent("Audio") {
                 Text("AAC \(stream.audioBitrate / 1000) kbps, "
                     + "\(Int(AVAudioSession.sharedInstance().sampleRate / 1000)) kHz"

@@ -698,6 +698,7 @@ final class VideoCaptureSession: NSObject, @unchecked Sendable {
             }
             device.activeColorSpace = colorSpace
             device.setLowLightBoost(value: nativeLowLightBoost)
+            device.daysConfigureContinuousFocus()
             if useAutoFrameRate {
                 device.setAutoFps()
                 processor?.delegate.streamSelectedFps(auto: true)

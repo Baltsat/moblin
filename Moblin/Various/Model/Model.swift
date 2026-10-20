@@ -1532,6 +1532,7 @@ final class Model: NSObject, ObservableObject {
         guard !isMac() else {
             return
         }
+        DaysBackgroundTask.shared.begin()
         switch backgroundRunLevel() {
         case .full:
             startLiveActivity()
@@ -1556,6 +1557,7 @@ final class Model: NSObject, ObservableObject {
 
     @objc func handleApplicationWillEnterForeground() {
         stopLiveActivity()
+        DaysBackgroundTask.shared.end()
         guard !isMac() else {
             return
         }
