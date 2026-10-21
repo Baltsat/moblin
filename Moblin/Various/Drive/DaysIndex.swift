@@ -6,7 +6,11 @@ import SwiftUI
 private let daysIndexFolderKey = "daysIndexFolderId"
 private let daysIndexPhoneFileKey = "daysIndexPhoneFileId"
 private let daysIndexMacFileKey = "daysIndexMacFileId"
-private let daysIndexEndsKey = "daysIndexEnds"
+private let daysIndexEndsKey = "daysIndexEnds2"
+private let daysIndexDurationsKey = "daysIndexDurations"
+private let daysIndexDurTriesKey = "daysIndexDurTries"
+private let daysIndexRepairedKey = "daysIndexRepaired1"
+private let daysEstimateBitrate = 12_000_000.0
 private let daysIndexThumbsKey = "daysIndexThumbs"
 private let daysIndexHistoryKey = "daysIndexPhoneHistory"
 private let daysThumbTriesKey = "daysIndexThumbTries"
@@ -51,6 +55,7 @@ struct DaysRawScene {
     var endMs: Int64?
     var failed: Bool
     var angles: [DaysAngle]
+    var endEst = false
 }
 
 struct DaysRawLive {
@@ -107,7 +112,8 @@ struct DaysRawIndex {
                               bytes: ($0["bytes"] as? NSNumber)?.int64Value ?? 0,
                               uploaded: ($0["uploaded"] as? NSNumber)?.int64Value ?? 0,
                               thumbs: $0["thumbs"] as? [String] ?? [])
-                }
+                },
+                endEst: scene["end_est"] as? Bool ?? false
             )
         }
     }
@@ -129,7 +135,7 @@ struct DaysRawIndex {
             ]
         }
         root["scenes"] = scenes.map { scene -> [String: Any] in
-            [
+            var out: [String: Any] = [
                 "session": scene.session,
                 "start_ms": scene.startMs,
                 "end_ms": scene.endMs ?? null,
@@ -145,6 +151,10 @@ struct DaysRawIndex {
                     ]
                 },
             ]
+            if scene.endEst {
+                out["end_est"] = true
+            }
+            return out
         }
         return try? JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])
     }
@@ -261,6 +271,8 @@ final class DaysIndex: ObservableObject {
     private var lastLeft: (bytes: Int64, at: Date)?
     private var fixtures = false
     private var thumbTimer: Timer?
+    private var wasRecording = false
+    private var resolving = false
     private var thumbsMap: [String: [String]] = [:]
     private var seeded = false
     private var generating = false
@@ -309,6 +321,10 @@ final class DaysIndex: ObservableObject {
             self?.pullTimer = nil
         }.store(in: &cancellables)
         rebuildPhone()
+        if driveAuth.isSignedIn, !UserDefaults.standard.bool(forKey: daysIndexRepairedKey) {
+            UserDefaults.standard.set(true, forKey: daysIndexRepairedKey)
+            push()
+        }
         startPulling()
         pushTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -346,6 +362,10 @@ final class DaysIndex: ObservableObject {
     }
 
     private func recordingChanged(_ value: Bool) {
+        guard value != wasRecording else {
+            return
+        }
+        wasRecording = value
         let now = nowMs()
         thumbTimer?.invalidate()
         thumbTimer = nil
@@ -360,7 +380,9 @@ final class DaysIndex: ObservableObject {
         } else {
             captureThumb()
             var ends = UserDefaults.standard.dictionary(forKey: daysIndexEndsKey) as? [String: Int64] ?? [:]
-            for item in daysQueue.items where ends[item.name] == nil && item.startMs >= recordingStartMs - 120_000 {
+            for item in daysQueue.items
+                where ends[item.name] == nil && recordingStartMs > 0 && item.startMs >= recordingStartMs - 120_000
+            {
                 ends[item.name] = now
             }
             UserDefaults.standard.set(ends, forKey: daysIndexEndsKey)
@@ -378,12 +400,23 @@ final class DaysIndex: ObservableObject {
         phoneRecording = recording
         let ends = UserDefaults.standard.dictionary(forKey: daysIndexEndsKey) as? [String: Int64] ?? [:]
         let phoneThumbs = UserDefaults.standard.dictionary(forKey: daysIndexThumbsKey) as? [String: [String]] ?? [:]
+        let durations = UserDefaults.standard.dictionary(forKey: daysIndexDurationsKey) as? [String: Double] ?? [:]
+        func resolved(_ session: String, _ start: Int64, _ bytes: Int64) -> (Int64, Bool) {
+            if let end = ends[session] {
+                return (end, false)
+            }
+            if let seconds = durations[session] {
+                return (start + Int64(seconds * 1000), false)
+            }
+            return (start + Int64(Double(bytes) * 8 / daysEstimateBitrate * 1000), true)
+        }
         var scenes: [DaysRawScene] = []
         var live: DaysRawLive?
         for (index, item) in daysQueue.items.enumerated().reversed() {
             let isLive = recording && index == 0 && ends[item.name] == nil
-            let end: Int64? = isLive ? nil : (ends[item.name] ?? item.startMs)
             let bytes = item.driveTotal
+            let estimate = resolved(item.name, item.startMs, bytes)
+            let end: Int64? = isLive ? nil : estimate.0
             let uploaded = item.driveDone ? bytes : min(item.driveAcked, bytes)
             scenes.append(DaysRawScene(
                 session: item.name,
@@ -395,7 +428,8 @@ final class DaysIndex: ObservableObject {
                                    driveId: item.driveFileId,
                                    bytes: bytes,
                                    uploaded: uploaded,
-                                   thumbs: phoneThumbs[item.name] ?? [])]
+                                   thumbs: phoneThumbs[item.name] ?? [])],
+                endEst: !isLive && estimate.1
             ))
             if isLive {
                 live = DaysRawLive(session: item.name,
@@ -407,7 +441,9 @@ final class DaysIndex: ObservableObject {
         }
         let names = Set(scenes.map(\.session))
         for var old in storedHistory().scenes where !names.contains(old.session) {
-            old.endMs = old.endMs ?? old.startMs
+            let estimate = resolved(old.session, old.startMs, old.angles.first?.bytes ?? 0)
+            old.endMs = estimate.0
+            old.endEst = estimate.1
             scenes.append(old)
         }
         scenes.sort { $0.startMs < $1.startMs }
@@ -479,6 +515,11 @@ final class DaysIndex: ObservableObject {
                 }
                 if scene.endMs == nil, !live || scene.session != file.live?.session {
                     scene.endMs = file.updatedMs
+                }
+                if scene.endEst, let end = scene.endMs {
+                    let bytes = scene.angles.map(\.bytes).max() ?? 0
+                    let estimate = Int64(Double(bytes) * 8 / daysEstimateBitrate * 1000)
+                    scene.endMs = min(end, scene.startMs + estimate)
                 }
                 raw.append(scene)
             }
@@ -627,6 +668,7 @@ final class DaysIndex: ObservableObject {
             }
             await pullExtras(folder: folder)
             generatePhoneThumbs()
+            resolveDurations()
             var fileId = UserDefaults.standard.string(forKey: daysIndexMacFileKey)
             if fileId == nil {
                 fileId = try? await api.findFile(name: "mac.json", folderId: folder)
@@ -667,6 +709,42 @@ final class DaysIndex: ObservableObject {
         {
             thumbsMap = map
             rebuildPhone()
+        }
+    }
+
+    private func resolveDurations() {
+        guard !fixtures, !resolving, driveAuth.isSignedIn else {
+            return
+        }
+        let ends = UserDefaults.standard.dictionary(forKey: daysIndexEndsKey) as? [String: Int64] ?? [:]
+        let durations = UserDefaults.standard.dictionary(forKey: daysIndexDurationsKey) as? [String: Double] ?? [:]
+        var tries = UserDefaults.standard.dictionary(forKey: daysIndexDurTriesKey) as? [String: Int] ?? [:]
+        let candidate = phone.scenes.reversed().first { scene in
+            guard let angle = scene.angles.first else {
+                return false
+            }
+            return scene.endMs != nil && scene.endEst && ends[scene.session] == nil
+                && durations[scene.session] == nil && angle.driveId != nil && angle.bytes > 0
+                && angle.uploaded >= angle.bytes && (tries[scene.session] ?? 0) < 3
+        }
+        guard let candidate, let driveId = candidate.angles.first?.driveId else {
+            return
+        }
+        resolving = true
+        tries[candidate.session] = (tries[candidate.session] ?? 0) + 1
+        UserDefaults.standard.set(tries, forKey: daysIndexDurTriesKey)
+        Task {
+            defer { resolving = false }
+            guard let token = try? await driveAuth.accessToken(),
+                  let seconds = await daysDriveDuration(fileId: driveId, token: token)
+            else {
+                return
+            }
+            var all = UserDefaults.standard.dictionary(forKey: daysIndexDurationsKey) as? [String: Double] ?? [:]
+            all[candidate.session] = seconds
+            UserDefaults.standard.set(all, forKey: daysIndexDurationsKey)
+            rebuildPhone()
+            push()
         }
     }
 
@@ -856,6 +934,17 @@ final class DaysThumbs {
         memory.setObject(image, forKey: id as NSString)
         return image
     }
+}
+
+func daysDriveDuration(fileId: String, token: String) async -> Double? {
+    guard let url = URL(string: "https://www.googleapis.com/drive/v3/files/\(fileId)?alt=media") else {
+        return nil
+    }
+    let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "Bearer \(token)"]])
+    guard let duration = try? await asset.load(.duration), duration.seconds.isFinite, duration.seconds > 0 else {
+        return nil
+    }
+    return duration.seconds
 }
 
 func daysDriveFrames(fileId: String, token: String) async -> [Data] {
