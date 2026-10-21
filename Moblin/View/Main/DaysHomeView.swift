@@ -15,6 +15,7 @@ enum DaysUI {
 private enum DaysRoute: Hashable {
     case day(String)
     case scene(String)
+    case uploads
 }
 
 func daysDuration(_ ms: Int64) -> String {
@@ -99,12 +100,17 @@ struct DaysHomeView: View {
                     DaysDayView(index: index, episodeId: id) { path.append(.scene($0)) }
                 case let .scene(id):
                     DaysSceneView(index: index, sceneId: id)
+                case .uploads:
+                    DaysUploadsView(index: index, drive: driveStatus, queue: daysQueue)
                 }
             }
         }
         .preferredColorScheme(.dark)
         .onAppear {
             #if DEBUG
+                if UserDefaults.standard.bool(forKey: "DaysOpenUploads"), path.isEmpty {
+                    path = [.uploads]
+                }
                 if let id = UserDefaults.standard.string(forKey: "DaysOpenScene"), path.isEmpty {
                     let scene = id == "today" ? index.today.scenes.first?.id : id
                     if let scene {
@@ -145,7 +151,17 @@ struct DaysHomeView: View {
                 .font(.system(size: 40, weight: .semibold))
                 .tracking(-1.2)
             HStack(spacing: 0) {
-                Text(verdict.text).fontWeight(.bold).foregroundStyle(verdict.color)
+                Button {
+                    path.append(.uploads)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(verdict.text).fontWeight(.bold).foregroundStyle(verdict.color)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(verdict.color.opacity(0.7))
+                    }
+                }
+                .buttonStyle(.plain)
                 if count > 0 {
                     Text(" \u{00B7} \(count) scene\(count == 1 ? "" : "s") \u{00B7} \(daysDuration(today.durationMs(now: daysNow())))")
                         .foregroundStyle(DaysUI.muted)
@@ -345,8 +361,9 @@ struct DaysSceneCard: View {
     var body: some View {
         let ms = scene.durationMs(now: daysNow())
         let present = scene.present
-        let main = present.first
-        let second = present.count > 1 ? present[1] : nil
+        let main = present.first { !$0.thumbs.isEmpty } ?? present.first
+        let others = present.filter { $0.angle != main?.angle }
+        let second = others.first { !$0.thumbs.isEmpty } ?? others.first
         let labels = present.map(\.label).joined(separator: " + ")
         return VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .bottomTrailing) {
