@@ -1,0 +1,505 @@
+import SwiftUI
+
+enum DaysUI {
+    static let bg = Color(red: 0x0D / 255, green: 0x0D / 255, blue: 0x0F / 255)
+    static let surface = Color(red: 0x17 / 255, green: 0x17 / 255, blue: 0x1A / 255)
+    static let line = Color(red: 0x1E / 255, green: 0x1E / 255, blue: 0x1E / 255)
+    static let muted = Color(red: 0x8C / 255, green: 0x8C / 255, blue: 0x8C / 255)
+    static let dim = Color(red: 0x6E / 255, green: 0x6E / 255, blue: 0x6E / 255)
+    static let red = Color(red: 0xE5 / 255, green: 0x09 / 255, blue: 0x14 / 255)
+    static let green = Color(red: 0x46 / 255, green: 0xD3 / 255, blue: 0x69 / 255)
+    static let amber = Color(red: 0xF5 / 255, green: 0xA6 / 255, blue: 0x23 / 255)
+    static let liveCard = Color(red: 0x1A / 255, green: 0x12 / 255, blue: 0x14 / 255)
+}
+
+private enum DaysRoute: Hashable {
+    case day(String)
+    case scene(String)
+}
+
+func daysDuration(_ ms: Int64) -> String {
+    let minutes = Int((Double(ms) / 60000).rounded())
+    if minutes < 60 {
+        return "\(minutes) min"
+    }
+    return String(format: "%dh %02dm", minutes / 60, minutes % 60)
+}
+
+func daysClock(_ ms: Int64, tz: TimeZone) -> String {
+    let formatter = DateFormatter()
+    formatter.timeZone = tz
+    formatter.dateFormat = "HH:mm"
+    return formatter.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
+}
+
+func daysWeekday(_ date: Date, tz: TimeZone, short: Bool = false) -> String {
+    let formatter = DateFormatter()
+    formatter.timeZone = tz
+    formatter.locale = Locale(identifier: "en_US")
+    formatter.dateFormat = short ? "EEEEE" : "EEEE"
+    return formatter.string(from: date)
+}
+
+private func daysDates(_ start: Date, tz: TimeZone) -> String {
+    let formatter = DateFormatter()
+    formatter.timeZone = tz
+    formatter.locale = Locale(identifier: "en_US")
+    formatter.dateFormat = "d"
+    let end = start.addingTimeInterval(6 * 86400)
+    formatter.dateFormat = "d MMM"
+    return "\(formatter.string(from: start)) \u{2013} \(formatter.string(from: end))"
+}
+
+private func daysNow() -> Int64 {
+    Int64(Date().timeIntervalSince1970 * 1000)
+}
+
+private struct DaysCaption: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold))
+            .tracking(0.7)
+            .foregroundStyle(DaysUI.muted)
+    }
+}
+
+struct DaysHomeView: View {
+    @EnvironmentObject var model: Model
+    @ObservedObject var index: DaysIndex
+    @Environment(\.dismiss) private var dismiss
+    @State private var path: [DaysRoute] = []
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    topBar
+                    if index.recordingNow {
+                        DaysLiveStrip(index: index, isRecording: model.isRecording)
+                    }
+                    header
+                    rollButton
+                    todaySection
+                    weekSection
+                    ForEach(index.seasons) { season in
+                        seasonSection(season)
+                    }
+                }
+                .padding(.horizontal, 22)
+                .padding(.top, 8)
+                .padding(.bottom, 40)
+            }
+            .background(DaysUI.bg.ignoresSafeArea())
+            .navigationBarHidden(true)
+            .navigationDestination(for: DaysRoute.self) { route in
+                switch route {
+                case let .day(id):
+                    DaysDayView(index: index, episodeId: id) { path.append(.scene($0)) }
+                case let .scene(id):
+                    DaysSceneView(index: index, sceneId: id)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            #if DEBUG
+                if let id = UserDefaults.standard.string(forKey: "DaysOpenScene"), path.isEmpty {
+                    let scene = id == "today" ? index.today.scenes.first?.id : id
+                    if let scene {
+                        path = [.scene(scene)]
+                    }
+                }
+            #endif
+        }
+    }
+
+    private var topBar: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(verbatim: "DAYS")
+                .font(.system(size: 18, weight: .heavy))
+                .tracking(5)
+                .foregroundStyle(DaysUI.red)
+            Spacer()
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(DaysUI.muted)
+                    .frame(width: 36, height: 28, alignment: .trailing)
+            }
+        }
+    }
+
+    private var header: some View {
+        let today = index.today
+        let verdict = index.verdict(today)
+        let count = today.scenes.count
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Season \(today.season) \u{00B7} Episode \(today.number)")
+                .font(.system(size: 13))
+                .foregroundStyle(DaysUI.muted)
+            Text(daysWeekday(today.day, tz: index.tz))
+                .font(.system(size: 40, weight: .semibold))
+                .tracking(-1.2)
+            HStack(spacing: 0) {
+                Text(verdict.text).fontWeight(.bold).foregroundStyle(verdict.color)
+                if count > 0 {
+                    Text(" \u{00B7} \(count) scene\(count == 1 ? "" : "s") \u{00B7} \(daysDuration(today.durationMs(now: daysNow())))")
+                        .foregroundStyle(DaysUI.muted)
+                }
+            }
+            .font(.system(size: 15))
+        }
+    }
+
+    private var rollButton: some View {
+        Button {
+            if model.isRecording {
+                dismiss()
+            } else {
+                model.startRecording()
+                dismiss()
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Circle().fill(DaysUI.red).frame(width: 12, height: 12)
+                Text(model.isRecording ? "Back to camera" : "Roll on iPhone")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .foregroundStyle(.black)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(.white, in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var todaySection: some View {
+        if !index.today.scenes.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                DaysCaption(text: "TODAY")
+                ForEach(index.today.scenes.reversed()) { scene in
+                    DaysSceneCard(scene: scene, tz: index.tz) { path.append(.scene(scene.id)) }
+                }
+            }
+        }
+    }
+
+    private var weekSection: some View {
+        let week = index.seasons.first?.episodes.reversed() ?? []
+        let longest = max(week.map { $0.durationMs(now: daysNow()) }.max() ?? 1, 1)
+        return VStack(alignment: .leading, spacing: 8) {
+            DaysCaption(text: "THIS WEEK")
+            HStack(spacing: 4) {
+                ForEach(0 ..< 7, id: \.self) { offset in
+                    let episode = offset < week.count ? week[offset] : nil
+                    let ms = episode?.durationMs(now: daysNow()) ?? 0
+                    let isToday = episode?.id == index.today.id
+                    VStack(spacing: 6) {
+                        ZStack(alignment: .bottom) {
+                            RoundedRectangle(cornerRadius: 6).fill(DaysUI.surface)
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(isToday ? DaysUI.red : .white)
+                                .frame(height: ms > 0 ? max(40 * CGFloat(ms) / CGFloat(longest), 3) : 0)
+                        }
+                        .frame(height: 40)
+                        Text(verbatim: ["M", "T", "W", "T", "F", "S", "S"][offset])
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(ms > 0 ? .white : Color.white.opacity(0.3))
+                        Text(ms > 0 ? daysShort(ms) : " ")
+                            .font(.system(size: 10))
+                            .foregroundStyle(DaysUI.dim)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+
+    private func daysShort(_ ms: Int64) -> String {
+        let minutes = Int((Double(ms) / 60000).rounded())
+        return minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h\(String(format: "%02d", minutes % 60))"
+    }
+
+    private func seasonSection(_ season: DaysSeason) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Season \(season.n)")
+                    .font(.system(size: 22, weight: .semibold))
+                    .tracking(-0.4)
+                Spacer()
+                Text("\(daysDates(season.start, tz: index.tz)) \u{00B7} \(daysDuration(season.totalMs(now: daysNow())))")
+                    .font(.system(size: 13))
+                    .foregroundStyle(DaysUI.muted)
+            }
+            .padding(.bottom, 8)
+            ForEach(season.episodes) { episode in
+                DaysDayRow(episode: episode, index: index) {
+                    if !episode.scenes.isEmpty {
+                        path.append(.day(episode.id))
+                    }
+                }
+            }
+        }
+        .padding(.top, 8)
+    }
+}
+
+private struct DaysDayRow: View {
+    let episode: DaysEpisode
+    @ObservedObject var index: DaysIndex
+    let action: () -> Void
+
+    var body: some View {
+        let ms = episode.durationMs(now: daysNow())
+        let count = episode.scenes.count
+        let isToday = episode.id == index.today.id
+        let longest = max(index.seasons.flatMap(\.episodes).map { $0.durationMs(now: daysNow()) }.max() ?? 1, 1)
+        return Button(action: action) {
+            HStack(spacing: 12) {
+                Text(verbatim: "E\(episode.number)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(DaysUI.dim)
+                    .frame(width: 28, alignment: .leading)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(daysWeekday(episode.day, tz: index.tz) + (isToday ? " \u{00B7} today" : ""))
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(count == 0 ? "no footage" : "\(count) scene\(count == 1 ? "" : "s") \u{00B7} \(episode.angleLabels)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(DaysUI.muted)
+                }
+                Spacer()
+                ZStack(alignment: .leading) {
+                    Capsule().fill(DaysUI.line)
+                    Capsule()
+                        .fill(isToday ? DaysUI.red : .white)
+                        .frame(width: 64 * CGFloat(ms) / CGFloat(longest))
+                }
+                .frame(width: 64, height: 6)
+                Text(ms > 0 ? daysDuration(ms) : "\u{2014}")
+                    .font(.system(size: 13))
+                    .foregroundStyle(isToday ? .white : Color(white: 0.7))
+                    .monospacedDigit()
+                    .frame(width: 58, alignment: .trailing)
+            }
+            .padding(.vertical, 10)
+            .opacity(count == 0 ? 0.4 : 1)
+            .overlay(alignment: .top) {
+                Rectangle().fill(DaysUI.line).frame(height: 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct DaysThumb: View {
+    let id: String?
+    let label: String
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            DaysUI.surface
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Text(label.uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(DaysUI.dim.opacity(0.7))
+            }
+        }
+        .clipped()
+        .task(id: id) {
+            image = nil
+            if let id {
+                image = await DaysThumbs.shared.image(id)
+            }
+        }
+    }
+}
+
+struct DaysAngleLink<Content: View>: View {
+    let youtube: String?
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if let youtube, let url = daysYouTubeUrl(youtube) {
+            Link(destination: url, label: content)
+        } else {
+            content()
+        }
+    }
+}
+
+struct DaysSceneCard: View {
+    let scene: DaysScene
+    let tz: TimeZone
+    let open: () -> Void
+
+    var body: some View {
+        let ms = scene.durationMs(now: daysNow())
+        let present = scene.present
+        let main = present.first
+        let second = present.count > 1 ? present[1] : nil
+        let labels = present.map(\.label).joined(separator: " + ")
+        return VStack(alignment: .leading, spacing: 10) {
+            ZStack(alignment: .bottomTrailing) {
+                DaysAngleLink(youtube: main?.youtube) {
+                    DaysThumb(id: main?.thumbs.last, label: main?.label ?? "Scene")
+                        .frame(height: 150)
+                        .frame(maxWidth: .infinity)
+                        .overlay(alignment: .bottomLeading) {
+                            Text(verbatim: "\(scene.number)")
+                                .font(.system(size: 34, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.9))
+                                .shadow(color: .black.opacity(0.6), radius: 6, y: 2)
+                                .padding(.leading, 14)
+                                .padding(.bottom, 10)
+                        }
+                }
+                if let second {
+                    DaysAngleLink(youtube: second.youtube) {
+                        DaysThumb(id: second.thumbs.last, label: second.label)
+                            .frame(width: 84, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(.black, lineWidth: 2))
+                            .padding(10)
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            Button(action: open) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Scene \(scene.number)").font(.system(size: 16, weight: .semibold))
+                    Spacer()
+                    Text("\(daysClock(scene.startMs, tz: tz)) \u{00B7} \(daysDuration(ms)) \u{00B7} \(labels)")
+                        .font(.system(size: 13))
+                        .foregroundStyle(DaysUI.muted)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+struct DaysDayView: View {
+    @ObservedObject var index: DaysIndex
+    let episodeId: String
+    let open: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let episode = index.episode(episodeId)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Button {
+                    dismiss()
+                } label: {
+                    Text(verbatim: "\u{2039} Days")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(DaysUI.muted)
+                }
+                if let episode {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(daysWeekday(episode.day, tz: index.tz))
+                            .font(.system(size: 40, weight: .semibold))
+                            .tracking(-1.2)
+                        Text("Season \(episode.season) \u{00B7} Episode \(episode.number) \u{00B7} \(daysDuration(episode.durationMs(now: daysNow())))")
+                            .font(.system(size: 14))
+                            .foregroundStyle(DaysUI.muted)
+                    }
+                    ForEach(episode.scenes.reversed()) { scene in
+                        DaysSceneCard(scene: scene, tz: index.tz) { open(scene.id) }
+                    }
+                }
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 8)
+            .padding(.bottom, 40)
+        }
+        .background(DaysUI.bg.ignoresSafeArea())
+        .navigationBarHidden(true)
+    }
+}
+
+private struct DaysLivePreview: View {
+    let label: String
+    let live: DaysLiveAngle
+
+    var body: some View {
+        DaysAngleLink(youtube: live.youtube) {
+            DaysThumb(id: live.thumbs.last, label: label)
+                .frame(width: 104, height: 58)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(alignment: .bottomLeading) {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color(red: 1, green: 0.35, blue: 0.37)).frame(width: 5, height: 5)
+                        Text(label).font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.7), radius: 3)
+                    .padding(6)
+                }
+        }
+    }
+}
+
+private struct DaysLiveStrip: View {
+    @ObservedObject var index: DaysIndex
+    let isRecording: Bool
+
+    private var startMs: Int64 {
+        [index.macLive?.startMs, index.phone.live?.startMs].compactMap { $0 }.min() ?? 0
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HStack(spacing: 8) {
+                    Circle().fill(DaysUI.red).frame(width: 9, height: 9)
+                    Text("Recording now \u{00B7} Scene \(max(index.today.scenes.count, 1))")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color(red: 1, green: 0.35, blue: 0.37))
+                }
+                Spacer()
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let seconds = max(Int(context.date.timeIntervalSince1970 - Double(startMs) / 1000), 0)
+                    Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
+                        .font(.system(size: 26, weight: .light))
+                        .monospacedDigit()
+                }
+            }
+            if let live = index.macLive {
+                row("MacBook", previews: live.angles.map {
+                    DaysLivePreview(label: $0.angle == "face" ? "Face" : "Screen", live: $0)
+                })
+            }
+            if isRecording {
+                row("iPhone", previews: [DaysLivePreview(
+                    label: "iPhone",
+                    live: index.phone.live?.angles.first ?? DaysLiveAngle(angle: "phone")
+                )])
+            }
+        }
+        .padding(16)
+        .background(DaysUI.liveCard, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func row(_ name: String, previews: [DaysLivePreview]) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(name).font(.system(size: 13)).foregroundStyle(Color(white: 0.7)).frame(width: 64, alignment: .leading)
+            HStack(spacing: 8) {
+                ForEach(0 ..< previews.count, id: \.self) { previews[$0] }
+            }
+            Spacer()
+        }
+    }
+}
