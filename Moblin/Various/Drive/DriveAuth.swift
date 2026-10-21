@@ -39,6 +39,7 @@ final class DriveAuth: NSObject, OIDAuthStateChangeDelegate, @unchecked Sendable
         }
         state.stateChangeDelegate = self
         authState = state
+        persist(state)
     }
 
     var isSignedIn: Bool {

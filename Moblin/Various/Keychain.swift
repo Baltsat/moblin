@@ -89,6 +89,7 @@ class Keychain {
         let attributes: [String: Any] = [
             kSecAttrAccount as String: streamId,
             kSecValueData as String: valueData,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
         let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         guard status != errSecItemNotFound else {
@@ -107,6 +108,7 @@ class Keychain {
             kSecAttrServer as String: server,
             kSecAttrAccount as String: streamId,
             kSecValueData as String: valueData,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
         let status = SecItemAdd(attributes as CFDictionary, nil)
         guard status == errSecSuccess else {

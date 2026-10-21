@@ -465,6 +465,12 @@ private actor DriveEngine {
 
     private func drain() async {
         await reconcileBackground()
+        guard driveAuth.isSignedIn else {
+            if sessions.values.contains(where: { !$0.manifest.done && !$0.manifest.failed }) {
+                setStatus("Google Drive: sign in again")
+            }
+            return
+        }
         guard DaysNet.shared.canUpload() else {
             if sessions.values.contains(where: { !$0.manifest.done && !$0.manifest.failed }) {
                 setStatus("Google Drive: waiting for network")
