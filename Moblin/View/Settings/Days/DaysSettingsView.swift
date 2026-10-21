@@ -53,58 +53,11 @@ private struct DaysAccountsSection: View {
             await drive.refreshEmail()
         }
         Section {
-            if github.signedIn {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label(github.login.isEmpty ? "Connected" : github.login, systemImage: "person.crop.circle")
-                    check(true, "Signed in")
-                    check(github.repoOk, "balkonsta/days-archive")
-                }
-                Button("Disconnect GitHub", role: .destructive) {
-                    githubDisconnect()
-                }
-            } else if let code = github.userCode {
-                VStack(spacing: 12) {
-                    Text("Enter this code on GitHub")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Text(code)
-                        .font(.system(size: 40, weight: .bold, design: .monospaced))
-                        .textSelection(.enabled)
-                    Button {
-                        UIPasteboard.general.string = code
-                        if let url = URL(string: github.verificationUri) {
-                            UIApplication.shared.open(url)
-                        }
-                    } label: {
-                        Label("Open github.com/login/device", systemImage: "safari")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    ProgressView()
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                Button("Cancel", role: .cancel) {
-                    githubCancelConnect()
-                }
-            } else {
-                Button {
-                    githubConnect()
-                } label: {
-                    Label("Connect GitHub", systemImage: "link")
-                }
-            }
-            if !github.text.isEmpty {
-                Text(github.text)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            Label("Mirrored from Drive automatically", systemImage: "archivebox")
         } header: {
             Text("GitHub")
         } footer: {
-            Text("Authorize as balkonsta. Recordings are archived to a private repository.")
-        }
-        .task(id: github.signedIn) {
-            await githubRefreshLogin()
+            Text("A GitHub Actions job copies recordings from Drive to github.com/balkonsta/days-archive. The phone does not upload to GitHub.")
         }
     }
 }
@@ -140,16 +93,11 @@ private struct DaysStatusSection: View {
     var body: some View {
         Section("Status") {
             LabeledContent {
-                Text(net.queueCount == 0 ? "Empty" : "\(net.queueCount) · \(UInt64(net.queueBytes).formatBytes())")
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text(daysQueueSummary(count: net.queueCount, bytes: net.queueBytes, at: context.date))
+                }
             } label: {
                 Label("Upload queue", systemImage: "arrow.up.circle")
-            }
-            if github.signedIn {
-                LabeledContent {
-                    Text(net.githubPending == 0 ? "Empty" : "\(net.githubPending)")
-                } label: {
-                    Label("GitHub queue", systemImage: "archivebox")
-                }
             }
             LabeledContent {
                 if let date = net.lastSync {
@@ -282,7 +230,7 @@ private struct DaysRecordingSection: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(effectiveLine)
                 if preset == .max {
-                    Text("Short scenes. Runs hot. ~13 GB/hour.")
+                    Text("Short scenes. Runs hot. ~13 GB/hour. Cannot be live-streamed smoothly on a 33 Mbps uplink.")
                 }
             }
         }
@@ -304,7 +252,6 @@ private struct DaysUploadSection: View {
     @AppStorage(DaysPrefs.wifiOnly) private var wifiOnly = true
     @AppStorage(DaysPrefs.youTubeEnabled) private var youTube = true
     @AppStorage(DaysPrefs.youTubeCellular) private var youTubeCellular = false
-    @AppStorage(DaysPrefs.githubArchive) private var githubArchiveOn = true
 
     var body: some View {
         Section {
@@ -316,7 +263,6 @@ private struct DaysUploadSection: View {
             }
             .onChange(of: wifiOnly) { _ in
                 driveUploader.resume()
-                githubArchive.resume()
             }
             Toggle(isOn: $youTube) {
                 Label("Stream to YouTube", systemImage: "play.rectangle")
@@ -325,18 +271,12 @@ private struct DaysUploadSection: View {
                 Label("YouTube over cellular", systemImage: "antenna.radiowaves.left.and.right")
             }
             .disabled(!youTube)
-            Toggle(isOn: $githubArchiveOn) {
-                Label("GitHub archive", systemImage: "archivebox")
-            }
-            .onChange(of: githubArchiveOn) { _ in
-                githubArchive.resume()
-            }
         } header: {
             Text("Upload")
         } footer: {
             Text("""
-            Recordings upload to Drive first. The local file is deleted once Drive and, when connected, \
-            the GitHub archive have both finished.
+            Recordings upload to Drive at full speed, oldest first. The local file is deleted once Drive has finished. \
+            GitHub is mirrored from Drive by a GitHub Actions job.
 
             Charger tips: Low Power Mode is fine. Use a wired charger, not MagSafe or wireless; it heats. \
             Take the case off. Keep the phone out of the sun.
@@ -347,6 +287,17 @@ private struct DaysUploadSection: View {
 
 private func daysMb(_ bytes: Int64) -> String {
     String(format: "%.0f", Double(bytes) / 1_048_576)
+}
+
+@MainActor
+private func daysQueueSummary(count: Int, bytes: Int64, at date: Date) -> String {
+    guard count > 0 else {
+        return String(localized: "Empty")
+    }
+    let gb = String(format: "%.1f GB", Double(bytes) / 1e9)
+    let speed = daysQueue.live.values.filter { date.timeIntervalSince($0.at) < 4 }.map(\.speed).max() ?? 0
+    let eta = speed > 0 ? " · ETA \(daysEta(Double(bytes) / speed))" : ""
+    return "\(count) · \(gb)\(eta)"
 }
 
 private func daysEta(_ seconds: Double) -> String {

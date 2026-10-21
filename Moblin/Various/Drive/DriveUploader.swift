@@ -494,16 +494,11 @@ private actor DriveEngine {
         if ackedParts < committed {
             let skip = Int(session.manifest.acked) - ackedParts * drivePartSize
             var chunk = Data()
-            let paced = DaysPace.live
-            for index in ackedParts ..< min(ackedParts + (paced ? 1 : driveChunkParts), committed) {
+            for index in ackedParts ..< min(ackedParts + driveChunkParts, committed) {
                 let part = try Data(contentsOf: session.partUrl(index))
                 chunk.append(index == ackedParts ? Data(part.dropFirst(skip)) : part)
             }
-            if paced {
-                chunk = Data(chunk.prefix(DaysPace.chunkBytes))
-            }
             session.needsResync = true
-            let started = Date()
             let result = try await api.putChunk(
                 uploadUrl: uploadUrl,
                 data: chunk,
@@ -513,10 +508,6 @@ private actor DriveEngine {
             )
             session.needsResync = false
             _ = try await apply(result, to: session)
-            if paced {
-                setStatus("Google Drive: paced (live)")
-                await DaysPace.space(bytes: chunk.count, since: started)
-            }
             return true
         }
         guard session.manifest.closed else {
@@ -588,7 +579,7 @@ private actor DriveEngine {
                 driveStatus.percent = nil
             }
         }
-        if session.manifest.githubHanded == true {
+        if session.manifest.githubHanded == true, DaysPrefs.isGitHubArchive {
             logger.info("drive: GitHub archive already running for \(session.manifest.name)")
         } else if let localPath = session.manifest.info.localPath {
             if githubAuth.isSignedIn, DaysPrefs.isGitHubArchive,
@@ -730,8 +721,8 @@ private actor DriveEngine {
                 daysNetStatus.queueBytes = bytes
             }
         }
-        let live = DaysPace.live ? "paced (live), " : current != nil ? "recording, " : ""
-        setStatus("Google Drive: \(live)\(UInt64(max(queued, 0)).formatBytes()) queued")
+        let live = current != nil ? "recording, " : ""
+        setStatus("Google Drive: \(live)\(pending.count) queued, \(UInt64(max(queued, 0)).formatBytes()) left")
     }
 
     private func setStatus(_ text: String) {

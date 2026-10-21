@@ -50,7 +50,7 @@ extension Model {
             stream.resolution = values.resolution
             stream.fps = values.fps
             stream.codec = .h264avc
-            stream.bitrate = min(values.streamBitrate, 6_000_000)
+            stream.bitrate = values.streamBitrate
             stream.rtmp.adaptiveBitrateEnabled = true
             stream.maxKeyFrameInterval = 2
             stream.audioCodec = .aac
@@ -144,13 +144,13 @@ enum DaysPreset: String, CaseIterable {
     var values: Values {
         switch self {
         case .allDay:
-            Values(resolution: .r1920x1080, fps: 30, streamBitrate: 12_000_000,
+            Values(resolution: .r1920x1080, fps: 30, streamBitrate: 4_000_000,
                    recordingCodec: .h264avc, recordingBitrate: 12_000_000)
         case .smooth:
-            Values(resolution: .r1920x1080, fps: 60, streamBitrate: 14_000_000,
+            Values(resolution: .r1920x1080, fps: 60, streamBitrate: 4_000_000,
                    recordingCodec: .h264avc, recordingBitrate: 14_000_000)
         case .max:
-            Values(resolution: .r3840x2160, fps: 30, streamBitrate: 35_000_000,
+            Values(resolution: .r3840x2160, fps: 30, streamBitrate: 4_000_000,
                    recordingCodec: .h265hevc, recordingBitrate: 30_000_000)
         }
     }
@@ -265,7 +265,11 @@ extension Model {
     }
 
     fileprivate func applyDaysBitrateMigration() {
-        let key = "daysBitrateMigration8"
+        if !UserDefaults.standard.bool(forKey: "daysGitHubOffMigration1") {
+            UserDefaults.standard.set(false, forKey: DaysPrefs.githubArchive)
+            UserDefaults.standard.set(true, forKey: "daysGitHubOffMigration1")
+        }
+        let key = "daysBitrateMigration9"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return
         }

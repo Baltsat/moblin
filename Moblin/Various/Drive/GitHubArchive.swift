@@ -495,10 +495,6 @@ private actor GitHubEngine {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue(item.contentType, forHTTPHeaderField: "Content-Type")
-        if DaysPace.live {
-            status("Paused for live")
-            await DaysPace.pauseWhileLive()
-        }
         status("Uploading \(item.name)")
         let (code, data) = try await send(request, file: file)
         switch code {

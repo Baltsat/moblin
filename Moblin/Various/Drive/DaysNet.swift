@@ -21,7 +21,7 @@ enum DaysPrefs {
     }
 
     static var isGitHubArchive: Bool {
-        bool(githubArchive, true)
+        bool(githubArchive, false)
     }
 
     static var dimSeconds: Int {
