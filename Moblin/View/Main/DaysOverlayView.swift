@@ -54,29 +54,39 @@ struct DaysPillView: View {
         }
     }
 
+    private var problem: Bool {
+        let low = battery.level >= 0 && battery.level < 0.2 && battery.state != .charging && battery.state != .full
+        return low || status.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
+    }
+
     var statusPill: some View {
         let upload = daysUploadText(drive.text, signedIn: drive.signedIn, percent: drive.percent)
         return HStack(spacing: 8) {
             if isRecording {
-                Circle().fill(.red).frame(width: 8, height: 8)
+                Circle().fill(DaysUI.red).frame(width: 10, height: 10)
                 Text(timer)
-                    .font(.system(.subheadline, design: .default).monospacedDigit().weight(.semibold))
-            }
-            if isRecording, upload != nil {
+                    .font(.system(size: 17, weight: .bold).monospacedDigit())
+                if isLive {
+                    Text("LIVE")
+                        .font(.system(size: 11, weight: .heavy))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(DaysUI.red, in: RoundedRectangle(cornerRadius: 6))
+                }
                 Text(verbatim: "\u{00B7}").foregroundStyle(.secondary)
-            }
-            if let upload {
+                Text("\u{2191} after Cut")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.8))
+            } else if let upload {
                 Text(upload).font(.subheadline)
-            } else if !isRecording {
+            } else {
                 Text("Ready").font(.subheadline)
             }
-            if isLive {
-                Text("LIVE").font(.caption.weight(.bold)).foregroundStyle(.red)
-            }
-            if isRecording {
-                Image(systemName: battery.state == .charging ? "battery.100.bolt" : "battery.50")
-                    .font(.subheadline)
-                Text("\(Int(battery.level * 100))%").font(.caption).monospacedDigit()
+            if problem {
+                if battery.level < 0.2, battery.state != .charging {
+                    Image(systemName: "battery.25").foregroundStyle(.orange)
+                    Text("\(Int(battery.level * 100))%").font(.caption).monospacedDigit()
+                }
                 if status.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue {
                     Image(systemName: "thermometer.high")
                         .foregroundStyle(status.thermalState == .critical ? .red : .orange)
@@ -85,10 +95,10 @@ struct DaysPillView: View {
                 }
             }
         }
-        .foregroundStyle(.primary)
+        .foregroundStyle(.white)
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Capsule())
+        .frame(height: 34)
+        .background(.black.opacity(0.6), in: Capsule())
         .environment(\.colorScheme, .dark)
     }
 }
@@ -187,7 +197,7 @@ private struct DaysRecordButton: View {
         .animation(.easeInOut(duration: 0.2), value: isRecording)
         .overlay(alignment: .bottom) {
             if isRecording {
-                Text("Hold to stop")
+                Text("Hold to cut")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.6))
                     .offset(y: 16)
@@ -286,6 +296,8 @@ struct DaysOverlayView: View {
     @ObservedObject var recording: RecordingProvider
     @ObservedObject var drive: DriveStatus
     let isRecording: Bool
+    @ObservedObject private var daysIndex = DaysIndex.shared
+    @State private var showHome = false
 
     private var pill: some View {
         DaysPillView(recording: recording,
@@ -296,6 +308,17 @@ struct DaysOverlayView: View {
                      isLive: model.isLive) {
             model.driveSignIn()
         }
+    }
+
+    private var home: some View {
+        DaysRoundButton(systemName: "film.stack") {
+            showHome = true
+        }
+    }
+
+    private var sceneLabel: String {
+        let today = daysIndex.today
+        return "S\(today.season):E\(today.number) \u{00B7} Scene \(max(today.scenes.count, 1))"
     }
 
     private var gear: some View {
@@ -324,7 +347,16 @@ struct DaysOverlayView: View {
         GeometryReader { geometry in
             content(portrait: geometry.size.height >= geometry.size.width)
         }
+        .fullScreenCover(isPresented: $showHome) {
+            DaysHomeView(index: daysIndex).environmentObject(model)
+        }
         .onAppear {
+            daysIndex.attach(model: model)
+            #if DEBUG
+                if UserDefaults.standard.bool(forKey: "DaysOpenHome") {
+                    showHome = true
+                }
+            #endif
             model.completePendingYouTube()
             guard UserDefaults.standard.bool(forKey: DaysPrefs.autoStart), !daysAutoStartDone else {
                 return
@@ -343,12 +375,20 @@ struct DaysOverlayView: View {
         if portrait {
             ZStack {
                 VStack {
-                    ZStack {
-                        pill
-                        HStack {
-                            Spacer()
-                            gear
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            pill
+                            if isRecording {
+                                Text(sceneLabel)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.75))
+                                    .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
+                                    .padding(.leading, 12)
+                            }
                         }
+                        Spacer()
+                        home
+                        gear
                     }
                     Spacer()
                     DaysLockBadge(camera: model.camera)
@@ -375,6 +415,7 @@ struct DaysOverlayView: View {
                 }
                 Spacer()
                 VStack {
+                    home
                     gear
                     Spacer()
                     DaysLockBadge(camera: model.camera)
