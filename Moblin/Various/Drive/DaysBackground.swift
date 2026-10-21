@@ -6,7 +6,7 @@ private let daysDetachedPrefix = "remainder|"
 
 final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     static let shared = DaysBackgroundUploader()
-    static let lanes = 4
+    static let lanes = 6
 
     private struct Waiter {
         let continuation: CheckedContinuation<(HTTPURLResponse, Data), Error>
@@ -24,7 +24,7 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
     private let chunkDir: URL = createAndGetDirectory(root: .cachesDirectory, name: "BackgroundChunks")
 
     private func identifier(_ lane: Int) -> String {
-        lane == 0 ? daysBackgroundIdentifier : "\(daysBackgroundIdentifier).\(lane)"
+        "\(daysBackgroundIdentifier).\(lane)"
     }
 
     private func session(_ lane: Int) -> URLSession {

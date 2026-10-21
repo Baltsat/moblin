@@ -480,7 +480,7 @@ private actor DriveEngine {
         }
         let eligible = sessions.values
             .filter { !$0.manifest.done && !$0.manifest.failed && !$0.manifest.bgActive && workers[$0.manifest.name] == nil }
-            .sorted { $0.manifest.name < $1.manifest.name }
+            .sorted { ($0.manifest.bytesTotal - $0.manifest.acked) < ($1.manifest.bytesTotal - $1.manifest.acked) }
         let detached = sessions.values.filter { $0.manifest.bgActive }.count
         var free = (DaysPace.live ? 1 : DaysBackgroundUploader.lanes) - workers.count - detached
         for session in eligible where free > 0 {
