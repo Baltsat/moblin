@@ -182,6 +182,10 @@ final class DriveApi: Sendable {
     }
 
     func createJson(name: String, folderId: String, content: Data) async throws -> String {
+        try await createFile(name: name, folderId: folderId, content: content, mimeType: "application/json")
+    }
+
+    func createFile(name: String, folderId: String, content: Data, mimeType: String) async throws -> String {
         let boundary = "dais\(UUID().uuidString)"
         var request = URLRequest(url: URL(string: "\(driveUploadUrl)?uploadType=multipart&fields=id")!)
         request.httpMethod = "POST"
@@ -189,12 +193,12 @@ final class DriveApi: Sendable {
         let metadata = try JSONSerialization.data(withJSONObject: [
             "name": name,
             "parents": [folderId],
-            "mimeType": "application/json",
+            "mimeType": mimeType,
         ])
         var body = Data()
         body.append(Data("--\(boundary)\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".utf8))
         body.append(metadata)
-        body.append(Data("\r\n--\(boundary)\r\nContent-Type: application/json\r\n\r\n".utf8))
+        body.append(Data("\r\n--\(boundary)\r\nContent-Type: \(mimeType)\r\n\r\n".utf8))
         body.append(content)
         body.append(Data("\r\n--\(boundary)--".utf8))
         let (response, data) = try await send(request, body: body)
@@ -208,5 +212,26 @@ final class DriveApi: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (response, data) = try await send(request, body: content)
         try check(response, data, ok: [200])
+    }
+
+    func findFile(name: String, folderId: String) async throws -> String? {
+        var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")!
+        let query = "name='\(name)' and '\(folderId)' in parents and trashed=false"
+        components.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "fields", value: "files(id)"),
+            URLQueryItem(name: "orderBy", value: "createdTime"),
+            URLQueryItem(name: "pageSize", value: "5"),
+        ]
+        let (response, data) = try await send(URLRequest(url: components.url!), body: nil)
+        try check(response, data, ok: [200])
+        return try JSONDecoder().decode(DriveFileList.self, from: data).files.first?.id
+    }
+
+    func downloadMedia(fileId: String) async throws -> Data {
+        let url = URL(string: "https://www.googleapis.com/drive/v3/files/\(fileId)?alt=media")!
+        let (response, data) = try await send(URLRequest(url: url), body: nil)
+        try check(response, data, ok: [200])
+        return data
     }
 }
