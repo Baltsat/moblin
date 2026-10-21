@@ -1,27 +1,54 @@
+import AlertToast
 import SwiftUI
 
-private func daysUploadText(_ status: String, signedIn: Bool, percent: Int?) -> String? {
-    let text = status.lowercased()
-    if text.isEmpty {
-        return signedIn ? "Synced" : nil
-    } else if text.contains("sign in") {
-        return "Sign in to Drive"
-    } else if text.contains("waiting for network") {
-        return "Waiting for Wi-Fi"
-    } else if text.contains("queued") {
-        if let percent {
+func daysToastStyle(titleColor: Color = .white, titleFont: Font? = nil) -> AlertToast.AlertStyle {
+    .style(backgroundColor: DaysUI.surface,
+           titleColor: titleColor,
+           subTitleColor: DaysUI.muted,
+           titleFont: titleFont ?? .system(size: 15, weight: .semibold),
+           subTitleFont: .system(size: 13))
+}
+
+private var daysFakeRecording: Bool {
+    #if DEBUG
+        UserDefaults.standard.bool(forKey: "DaysFakeRecording")
+    #else
+        false
+    #endif
+}
+
+@MainActor private func daysUploadText(_ drive: DriveStatus) -> String? {
+    if let reason = daysUploadReason(drive: drive) {
+        return reason
+    }
+    let text = drive.text.lowercased()
+    if text.contains("queued") {
+        if let percent = drive.percent {
             return "\u{2191} \(percent)%"
         }
-        let size = status.replacingOccurrences(of: "Google Drive: ", with: "")
-            .replacingOccurrences(of: "recording, ", with: "")
-            .replacingOccurrences(of: " queued", with: "")
-        return "\u{2191} \(size) queued"
-    } else if text.contains("uploaded") {
-        return "Synced"
-    } else if text.contains("failed") || text.contains("lost") {
-        return "Upload issue"
+        return "\u{2191} Uploading"
     }
-    return status
+    return nil
+}
+
+private struct DaysGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        content.background(Color.black.opacity(0.5), in: Capsule())
+            .environment(\.colorScheme, .dark)
+    }
+}
+
+private extension View {
+    func daysGlass() -> some View {
+        modifier(DaysGlass())
+    }
+}
+
+@MainActor private func daysSceneLabel(_ index: DaysIndex, recording: Bool) -> String {
+    let today = index.today
+    let count = today.scenes.count
+    let number = recording ? max(count, 1) : count + 1
+    return "S\(today.season):E\(today.number) \u{00B7} Scene \(number)"
 }
 
 struct DaysPillView: View {
@@ -29,91 +56,128 @@ struct DaysPillView: View {
     @ObservedObject var drive: DriveStatus
     @ObservedObject var battery: Battery
     @ObservedObject var status: StatusOther
+    @ObservedObject private var index = DaysIndex.shared
     let isRecording: Bool
     let isLive: Bool
     let onReconnect: () -> Void
 
+    private var rec: Bool {
+        isRecording || daysFakeRecording
+    }
+
     private var timer: String {
-        recording.length.split(separator: " ").first.map(String.init) ?? ""
+        if daysFakeRecording, !isRecording {
+            return "12:33"
+        }
+        return recording.length.split(separator: " ").first.map(String.init) ?? "0:00"
     }
 
     var body: some View {
-        if drive.signedIn, !drive.hasYouTube {
-            Button(action: onReconnect) {
-                Label("Tap to reconnect Google", systemImage: "exclamationmark.circle.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.yellow)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .environment(\.colorScheme, .dark)
+        VStack(alignment: .leading, spacing: 6) {
+            if rec {
+                HStack(spacing: 10) {
+                    Circle().fill(DaysUI.red).frame(width: 10, height: 10)
+                    Text(timer)
+                        .font(.system(size: 24, weight: .light))
+                        .monospacedDigit()
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .frame(height: 42)
+                .daysGlass()
+                Text(daysSceneLabel(index, recording: true))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
+                    .padding(.leading, 14)
+            } else {
+                HStack(spacing: 8) {
+                    Circle().fill(index.verdict(index.today).color).frame(width: 7, height: 7)
+                    Text(daysSceneLabel(index, recording: false))
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundStyle(.white.opacity(0.9))
+                .padding(.horizontal, 14)
+                .frame(height: 34)
+                .daysGlass()
+                if drive.signedIn, !drive.hasYouTube {
+                    Button(action: onReconnect) {
+                        Text("Reconnect Google")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(DaysUI.amber)
+                            .padding(.horizontal, 12)
+                            .frame(height: 28)
+                            .daysGlass()
+                    }
+                    .buttonStyle(.plain)
+                } else if let text = daysUploadText(drive) {
+                    Text(text)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .padding(.leading, 14)
+                }
             }
-            .buttonStyle(.plain)
-        } else {
-            statusPill
         }
     }
+}
 
-    private var problem: Bool {
-        let low = battery.level >= 0 && battery.level < 0.2 && battery.state != .charging && battery.state != .full
-        return low || status.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
+struct DaysStatusPill: View {
+    @ObservedObject var drive: DriveStatus
+    @ObservedObject var battery: Battery
+    @ObservedObject var status: StatusOther
+    let isLive: Bool
+
+    private var lowBattery: Bool {
+        battery.level >= 0 && battery.level < 0.2 && battery.state != .charging && battery.state != .full
     }
 
-    var statusPill: some View {
-        let upload = daysUploadText(drive.text, signedIn: drive.signedIn, percent: drive.percent)
-        return HStack(spacing: 8) {
-            if isRecording {
-                Circle().fill(DaysUI.red).frame(width: 10, height: 10)
-                Text(timer)
-                    .font(.system(size: 17, weight: .bold).monospacedDigit())
-                if isLive {
-                    Text("LIVE")
-                        .font(.system(size: 11, weight: .heavy))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(DaysUI.red, in: RoundedRectangle(cornerRadius: 6))
-                }
-                Text(verbatim: "\u{00B7}").foregroundStyle(.secondary)
-                Text("\u{2191} after Cut")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.8))
-            } else if let upload {
-                Text(upload).font(.subheadline)
-            } else {
-                Text("Ready").font(.subheadline)
+    private var hot: Bool {
+        status.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if isLive || daysFakeRecording {
+                Text("LIVE")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(DaysUI.red, in: RoundedRectangle(cornerRadius: 6))
             }
-            if problem {
-                if battery.level < 0.2, battery.state != .charging {
-                    Image(systemName: "battery.25").foregroundStyle(.orange)
-                    Text("\(Int(battery.level * 100))%").font(.caption).monospacedDigit()
-                }
-                if status.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue {
-                    Image(systemName: "thermometer.high")
-                        .foregroundStyle(status.thermalState == .critical ? .red : .orange)
-                    Text(status.thermalState == .critical ? "Critical" : "Hot")
-                        .font(.caption)
-                }
+            Text(daysUploadReason(drive: drive).map { "\u{2191} \($0)" } ?? "\u{2191} after Cut")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+            if lowBattery {
+                Image(systemName: "battery.25").foregroundStyle(DaysUI.amber)
+                Text("\(Int(battery.level * 100))%").font(.system(size: 12)).monospacedDigit()
+            }
+            if hot {
+                Image(systemName: "thermometer.high")
+                    .foregroundStyle(status.thermalState == .critical ? DaysUI.red : DaysUI.amber)
+                Text(status.thermalState == .critical ? "Critical" : "Hot").font(.system(size: 12))
             }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .frame(height: 34)
-        .background(.black.opacity(0.6), in: Capsule())
-        .environment(\.colorScheme, .dark)
+        .daysGlass()
     }
 }
 
 private struct DaysRoundButton: View {
     let systemName: String
+    var size: CGFloat = 44
+    var tint: Color = .white
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(.ultraThinMaterial, in: Circle())
+                .font(.system(size: size * 0.38, weight: .regular))
+                .foregroundStyle(tint)
+                .frame(width: size, height: size)
+                .background(Color.black.opacity(0.5), in: Circle())
         }
         .buttonStyle(.plain)
     }
@@ -124,16 +188,11 @@ private struct DaysTorchButton: View {
     @ObservedObject var overlay: StreamOverlay
 
     var body: some View {
-        Button {
+        DaysRoundButton(systemName: overlay.isTorchOn ? "bolt.fill" : "bolt.slash.fill",
+                        tint: overlay.isTorchOn ? .yellow : .white)
+        {
             model.toggleTorch()
-        } label: {
-            Image(systemName: overlay.isTorchOn ? "bolt.fill" : "bolt.slash.fill")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(overlay.isTorchOn ? .yellow : .white)
-                .frame(width: 44, height: 44)
-                .background(.ultraThinMaterial, in: Circle())
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -164,12 +223,11 @@ private struct DaysLockBadge: View {
     var body: some View {
         if camera.aeAfLocked {
             Label("AE/AF LOCK", systemImage: "lock.fill")
-                .font(.subheadline.weight(.bold))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(.yellow)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.ultraThinMaterial, in: Capsule())
-                .environment(\.colorScheme, .dark)
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .daysGlass()
         }
     }
 }
@@ -181,51 +239,49 @@ private struct DaysRecordButton: View {
     @State private var progress = 0.0
 
     var body: some View {
-        ZStack {
-            Circle().stroke(.white, lineWidth: 4).frame(width: 76, height: 76)
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(.red, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .frame(width: 76, height: 76)
-            RoundedRectangle(cornerRadius: isRecording ? 8 : 30)
-                .fill(.red)
-                .frame(width: isRecording ? 32 : 60, height: isRecording ? 32 : 60)
-        }
-        .frame(width: 84, height: 84)
-        .contentShape(Circle())
-        .animation(.easeInOut(duration: 0.2), value: isRecording)
-        .overlay(alignment: .bottom) {
-            if isRecording {
-                Text("Hold to cut")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.6))
-                    .offset(y: 16)
+        VStack(spacing: 10) {
+            ZStack {
+                Circle().stroke(.white.opacity(0.9), lineWidth: 3).frame(width: 76, height: 76)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(DaysUI.red, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 76, height: 76)
+                RoundedRectangle(cornerRadius: isRecording ? 6 : 30)
+                    .fill(DaysUI.red)
+                    .frame(width: isRecording ? 28 : 60, height: isRecording ? 28 : 60)
             }
-        }
-        .onTapGesture {
-            if !isRecording {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                onStart()
-            }
-        }
-        .onLongPressGesture(minimumDuration: 1.5, maximumDistance: 60) {
-            if isRecording {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                progress = 0
-                onStop()
-            }
-        } onPressingChanged: { pressing in
-            if pressing, isRecording {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                withAnimation(.linear(duration: 1.5)) {
-                    progress = 1
+            .frame(width: 84, height: 84)
+            .contentShape(Circle())
+            .animation(.easeInOut(duration: 0.2), value: isRecording)
+            .onTapGesture {
+                if !isRecording {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    onStart()
                 }
-            } else {
-                withAnimation(.easeOut(duration: 0.15)) {
+            }
+            .onLongPressGesture(minimumDuration: 1.5, maximumDistance: 60) {
+                if isRecording {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     progress = 0
+                    onStop()
+                }
+            } onPressingChanged: { pressing in
+                if pressing, isRecording {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.linear(duration: 1.5)) {
+                        progress = 1
+                    }
+                } else {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        progress = 0
+                    }
                 }
             }
+            Text(isRecording ? "Hold to cut" : "Roll")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.8))
+                .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
         }
     }
 }
@@ -240,22 +296,21 @@ private struct DaysZoomPillView: View {
             model.setZoomX(x: x)
         } label: {
             Text(label)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(active ? .yellow : .white)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(active ? .white : .white.opacity(0.6))
                 .frame(width: 36, height: 36)
-                .background(active ? Color.black.opacity(0.5) : .clear, in: Circle())
+                .background(active ? Color.white.opacity(0.18) : .clear, in: Circle())
         }
         .buttonStyle(.plain)
     }
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 0) {
             button(1, "1\u{00D7}")
             button(2, "2\u{00D7}")
         }
-        .padding(3)
-        .background(.ultraThinMaterial, in: Capsule())
-        .environment(\.colorScheme, .dark)
+        .padding(4)
+        .daysGlass()
     }
 }
 
@@ -300,6 +355,10 @@ struct DaysOverlayView: View {
     @ObservedObject private var daysIndex = DaysIndex.shared
     @State private var showHome = false
 
+    private var rec: Bool {
+        isRecording || daysFakeRecording
+    }
+
     private var pill: some View {
         DaysPillView(recording: recording,
                      drive: drive,
@@ -311,35 +370,43 @@ struct DaysOverlayView: View {
         }
     }
 
-    private var home: some View {
-        DaysRoundButton(systemName: "film.stack") {
-            showHome = true
+    private var statusPill: some View {
+        DaysStatusPill(drive: drive, battery: model.battery, status: model.statusOther, isLive: model.isLive)
+    }
+
+    private var pair: some View {
+        HStack(spacing: 10) {
+            DaysRoundButton(systemName: "film.stack", size: rec ? 40 : 44) {
+                showHome = true
+            }
+            DaysRoundButton(systemName: "gearshape", size: rec ? 40 : 44) {
+                model.toggleShowingPanel(type: nil, panel: .settings)
+            }
         }
     }
 
-    private var sceneLabel: String {
-        let today = daysIndex.today
-        return "S\(today.season):E\(today.number) \u{00B7} Scene \(max(today.scenes.count, 1))"
-    }
-
-    private var gear: some View {
-        DaysRoundButton(systemName: "gearshape.fill") {
-            model.toggleShowingPanel(type: nil, panel: .settings)
+    private var topRight: some View {
+        VStack(alignment: .trailing, spacing: 10) {
+            if rec {
+                statusPill
+            }
+            pair
         }
     }
 
-    private var black: some View {
-        DaysRoundButton(systemName: "moon.fill") {
-            model.setStealthMode(on: true)
+    private var controls: some View {
+        HStack(spacing: 12) {
+            DaysRoundButton(systemName: "moon") {
+                model.setStealthMode(on: true)
+            }
+            DaysFlipButton(model: model)
+            DaysTorchButton(model: model, overlay: model.streamOverlay)
+            DaysZoomIfBack(model: model, overlay: model.streamOverlay)
         }
-    }
-
-    private var torch: some View {
-        DaysTorchButton(model: model, overlay: model.streamOverlay)
     }
 
     private var record: some View {
-        DaysRecordButton(isRecording: isRecording,
+        DaysRecordButton(isRecording: rec,
                          onStart: { model.startRecording() },
                          onStop: { model.stopRecording() })
     }
@@ -378,58 +445,37 @@ struct DaysOverlayView: View {
     @ViewBuilder
     private func content(portrait: Bool) -> some View {
         if portrait {
-            ZStack {
-                VStack {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            pill
-                            if isRecording {
-                                Text(sceneLabel)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.75))
-                                    .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
-                                    .padding(.leading, 12)
-                            }
-                        }
-                        Spacer()
-                        home
-                        gear
-                    }
-                    Spacer()
-                    DaysLockBadge(camera: model.camera)
-                    DaysZoomIfBack(model: model, overlay: model.streamOverlay)
-                        .padding(.bottom, 14)
-                    ZStack {
-                        record
-                        HStack {
-                            black
-                            Spacer()
-                            DaysFlipButton(model: model)
-                            torch
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-            }
-        } else {
-            HStack {
-                VStack {
+            VStack(spacing: 0) {
+                HStack(alignment: .top) {
                     pill
                     Spacer()
+                    topRight
                 }
                 Spacer()
-                VStack {
-                    home
-                    gear
+                DaysLockBadge(camera: model.camera)
+                    .padding(.bottom, 10)
+                controls
+                    .padding(.bottom, 22)
+                record
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
+        } else {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading) {
+                    pill
+                    Spacer()
+                    HStack {
+                        controls
+                    }
+                }
+                Spacer()
+                VStack(alignment: .trailing) {
+                    topRight
                     Spacer()
                     DaysLockBadge(camera: model.camera)
-                    DaysZoomIfBack(model: model, overlay: model.streamOverlay)
                     record
-                    Spacer()
-                    torch
-                    DaysFlipButton(model: model)
-                    black
                 }
             }
             .padding(.horizontal, 20)
@@ -520,16 +566,24 @@ struct DaysDimView: View {
                 Color.black.opacity(0.8)
                     .ignoresSafeArea()
                 VStack {
-                    DaysPillView(recording: recording,
-                                 drive: drive,
-                                 battery: model.battery,
-                                 status: model.statusOther,
-                                 isRecording: true,
-                                 isLive: model.isLive) {}
-                        .opacity(0.9)
+                    HStack(alignment: .top) {
+                        DaysPillView(recording: recording,
+                                     drive: drive,
+                                     battery: model.battery,
+                                     status: model.statusOther,
+                                     isRecording: true,
+                                     isLive: model.isLive) {}
+                        Spacer()
+                        DaysStatusPill(drive: drive,
+                                       battery: model.battery,
+                                       status: model.statusOther,
+                                       isLive: model.isLive)
+                    }
+                    .opacity(0.9)
                     Spacer()
                 }
-                .padding(.top, 12)
+                .padding(.horizontal, 18)
+                .padding(.top, 8)
                 Color.clear
                     .contentShape(Rectangle())
                     .ignoresSafeArea()

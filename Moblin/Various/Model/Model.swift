@@ -967,7 +967,7 @@ final class Model: NSObject, ObservableObject {
         toast.toast = AlertToast(type: .regular,
                                  title: title,
                                  subTitle: subTitle,
-                                 style: .style(subTitleFont: .body))
+                                 style: daysToastStyle())
         toast.onTapped = onTapped
         showToast()
         logger.debug("toast: Info: \(title): \(subTitle ?? "-")")
@@ -980,7 +980,7 @@ final class Model: NSObject, ObservableObject {
         toast.toast = AlertToast(type: .regular,
                                  title: formatWarning(title),
                                  subTitle: subTitle,
-                                 style: .style(subTitleFont: .body))
+                                 style: daysToastStyle())
         showToast()
         logger.debug("toast: Warning: \(title): \(subTitle ?? "-")")
         if vibrate {
@@ -993,7 +993,7 @@ final class Model: NSObject, ObservableObject {
             type: .regular,
             title: title,
             subTitle: subTitle,
-            style: .style(titleColor: .red, titleFont: font, subTitleFont: .body)
+            style: daysToastStyle(titleColor: Color(red: 1, green: 0.35, blue: 0.37), titleFont: font)
         )
         showToast()
         logger.debug("toast: Error: \(title): \(subTitle ?? "-")")
