@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import Foundation
 import SwiftUI
@@ -7,6 +8,8 @@ private let daysIndexPhoneFileKey = "daysIndexPhoneFileId"
 private let daysIndexMacFileKey = "daysIndexMacFileId"
 private let daysIndexEndsKey = "daysIndexEnds"
 private let daysIndexThumbsKey = "daysIndexThumbs"
+private let daysIndexHistoryKey = "daysIndexPhoneHistory"
+private let daysThumbTriesKey = "daysIndexThumbTries"
 private let daysIndexThumbFolderKey = "daysIndexThumbFolderId"
 private let daysStaleMs: Int64 = 180_000
 private let daysMergeGapMs: Int64 = 10000
@@ -258,6 +261,10 @@ final class DaysIndex: ObservableObject {
     private var lastLeft: (bytes: Int64, at: Date)?
     private var fixtures = false
     private var thumbTimer: Timer?
+    private var thumbsMap: [String: [String]] = [:]
+    private var seeded = false
+    private var generating = false
+    private var pulls = 0
     private(set) var tz = TimeZone.current
 
     var leftEta: String? {
@@ -398,12 +405,53 @@ final class DaysIndex: ObservableObject {
                                                           thumbs: phoneThumbs[item.name] ?? [])])
             }
         }
+        let names = Set(scenes.map(\.session))
+        for var old in storedHistory().scenes where !names.contains(old.session) {
+            old.endMs = old.endMs ?? old.startMs
+            scenes.append(old)
+        }
+        scenes.sort { $0.startMs < $1.startMs }
+        for index in scenes.indices {
+            for angleIndex in scenes[index].angles.indices where scenes[index].angles[angleIndex].thumbs.isEmpty {
+                scenes[index].angles[angleIndex].thumbs = phoneThumbs[scenes[index].session] ?? []
+            }
+        }
         phone = DaysRawIndex(device: "iphone",
                              tz: tz.identifier,
                              updatedMs: nowMs(),
                              live: live,
                              scenes: scenes)
+        if let data = phone.encoded() {
+            UserDefaults.standard.set(data, forKey: daysIndexHistoryKey)
+        }
         rebuild()
+    }
+
+    private func storedHistory() -> DaysRawIndex {
+        let data = UserDefaults.standard.data(forKey: daysIndexHistoryKey)
+        return data.flatMap { DaysRawIndex(data: $0) }
+            ?? DaysRawIndex(device: "iphone", tz: tz.identifier, updatedMs: 0, live: nil, scenes: [])
+    }
+
+    private func seedHistory(_ remote: DaysRawIndex) {
+        var stored = storedHistory()
+        let known = Set(stored.scenes.map(\.session)).union(daysQueue.items.map(\.name))
+        let extra = remote.scenes.filter { !known.contains($0.session) }
+        guard !extra.isEmpty else {
+            return
+        }
+        stored.scenes += extra
+        if let data = stored.encoded() {
+            UserDefaults.standard.set(data, forKey: daysIndexHistoryKey)
+        }
+        var ids = UserDefaults.standard.dictionary(forKey: daysIndexThumbsKey) as? [String: [String]] ?? [:]
+        for scene in extra {
+            if let thumbs = scene.angles.first?.thumbs, !thumbs.isEmpty, ids[scene.session] == nil {
+                ids[scene.session] = thumbs
+            }
+        }
+        UserDefaults.standard.set(ids, forKey: daysIndexThumbsKey)
+        rebuildPhone()
     }
 
     func rebuild() {
@@ -424,6 +472,11 @@ final class DaysIndex: ObservableObject {
                     continue
                 }
                 var scene = scene
+                for index in scene.angles.indices where scene.angles[index].thumbs.isEmpty {
+                    if let id = scene.angles[index].driveId, let ids = thumbsMap[id] {
+                        scene.angles[index].thumbs = ids
+                    }
+                }
                 if scene.endMs == nil, !live || scene.session != file.live?.session {
                     scene.endMs = file.updatedMs
                 }
@@ -567,10 +620,13 @@ final class DaysIndex: ObservableObject {
         guard !fixtures, driveAuth.isSignedIn else {
             return
         }
+        pulls += 1
         Task {
             guard let folder = try? await indexFolderId() else {
                 return
             }
+            await pullExtras(folder: folder)
+            generatePhoneThumbs()
             var fileId = UserDefaults.standard.string(forKey: daysIndexMacFileKey)
             if fileId == nil {
                 fileId = try? await api.findFile(name: "mac.json", folderId: folder)
@@ -588,6 +644,75 @@ final class DaysIndex: ObservableObject {
             } catch DriveError.sessionGone {
                 UserDefaults.standard.removeObject(forKey: daysIndexMacFileKey)
             } catch {}
+        }
+    }
+
+    private func pullExtras(folder: String) async {
+        if !seeded {
+            seeded = true
+            var own = UserDefaults.standard.string(forKey: daysIndexPhoneFileKey)
+            if own == nil {
+                own = try? await api.findFile(name: "iphone.json", folderId: folder)
+            }
+            if let own, let data = try? await api.downloadMedia(fileId: own), let remote = DaysRawIndex(data: data) {
+                seedHistory(remote)
+            }
+        }
+        guard pulls % 10 == 1 else {
+            return
+        }
+        if let id = try? await api.findFile(name: "thumbs-phone.json", folderId: folder),
+           let data = try? await api.downloadMedia(fileId: id),
+           let map = try? JSONSerialization.jsonObject(with: data) as? [String: [String]]
+        {
+            thumbsMap = map
+            rebuildPhone()
+        }
+    }
+
+    private func generatePhoneThumbs() {
+        guard !fixtures, !generating, driveAuth.isSignedIn else {
+            return
+        }
+        var tries = UserDefaults.standard.dictionary(forKey: daysThumbTriesKey) as? [String: Int] ?? [:]
+        let candidate = phone.scenes.reversed().first { scene in
+            guard let angle = scene.angles.first else {
+                return false
+            }
+            return scene.endMs != nil && angle.driveId != nil && angle.thumbs.isEmpty && angle.bytes > 0
+                && angle.uploaded >= angle.bytes && (tries[scene.session] ?? 0) < 3
+                && thumbsMap[angle.driveId ?? ""] == nil
+        }
+        guard let candidate, let driveId = candidate.angles.first?.driveId else {
+            return
+        }
+        generating = true
+        tries[candidate.session] = (tries[candidate.session] ?? 0) + 1
+        UserDefaults.standard.set(tries, forKey: daysThumbTriesKey)
+        Task {
+            defer { generating = false }
+            guard let token = try? await driveAuth.accessToken(), let folder = try? await thumbFolderId() else {
+                return
+            }
+            let frames = await daysDriveFrames(fileId: driveId, token: token)
+            var ids: [String] = []
+            for (number, frame) in frames.enumerated() {
+                if let id = try? await api.createFile(name: "\(candidate.session)_phone_\(number + 1).jpg",
+                                                      folderId: folder,
+                                                      content: frame,
+                                                      mimeType: "image/jpeg")
+                {
+                    ids.append(id)
+                }
+            }
+            guard !ids.isEmpty else {
+                return
+            }
+            var all = UserDefaults.standard.dictionary(forKey: daysIndexThumbsKey) as? [String: [String]] ?? [:]
+            all[candidate.session] = ids
+            UserDefaults.standard.set(all, forKey: daysIndexThumbsKey)
+            rebuildPhone()
+            push()
         }
     }
 
@@ -731,4 +856,29 @@ final class DaysThumbs {
         memory.setObject(image, forKey: id as NSString)
         return image
     }
+}
+
+func daysDriveFrames(fileId: String, token: String) async -> [Data] {
+    guard let url = URL(string: "https://www.googleapis.com/drive/v3/files/\(fileId)?alt=media") else {
+        return []
+    }
+    let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "Bearer \(token)"]])
+    guard let duration = try? await asset.load(.duration), duration.seconds > 1 else {
+        return []
+    }
+    let generator = AVAssetImageGenerator(asset: asset)
+    generator.appliesPreferredTrackTransform = true
+    generator.maximumSize = CGSize(width: 480, height: 480)
+    generator.requestedTimeToleranceBefore = .positiveInfinity
+    generator.requestedTimeToleranceAfter = .positiveInfinity
+    var frames: [Data] = []
+    for fraction in [0.05, 0.5, 0.95] {
+        let time = CMTime(seconds: duration.seconds * fraction, preferredTimescale: 600)
+        if let (image, _) = try? await generator.image(at: time),
+           let jpeg = await daysThumbJpeg(UIImage(cgImage: image))
+        {
+            frames.append(jpeg)
+        }
+    }
+    return frames
 }
