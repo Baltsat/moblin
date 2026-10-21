@@ -144,13 +144,13 @@ enum DaysPreset: String, CaseIterable {
     var values: Values {
         switch self {
         case .allDay:
-            Values(resolution: .r1920x1080, fps: 30, streamBitrate: 4_000_000,
+            Values(resolution: .r1920x1080, fps: 30, streamBitrate: 9_000_000,
                    recordingCodec: .h264avc, recordingBitrate: 12_000_000)
         case .smooth:
-            Values(resolution: .r1920x1080, fps: 60, streamBitrate: 4_000_000,
+            Values(resolution: .r1920x1080, fps: 60, streamBitrate: 12_000_000,
                    recordingCodec: .h264avc, recordingBitrate: 14_000_000)
         case .max:
-            Values(resolution: .r3840x2160, fps: 30, streamBitrate: 4_000_000,
+            Values(resolution: .r3840x2160, fps: 30, streamBitrate: 12_000_000,
                    recordingCodec: .h265hevc, recordingBitrate: 30_000_000)
         }
     }
@@ -269,7 +269,7 @@ extension Model {
             UserDefaults.standard.set(false, forKey: DaysPrefs.githubArchive)
             UserDefaults.standard.set(true, forKey: "daysGitHubOffMigration1")
         }
-        let key = "daysBitrateMigration9"
+        let key = "daysBitrateMigration10"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return
         }

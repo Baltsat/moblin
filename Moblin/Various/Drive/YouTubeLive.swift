@@ -235,7 +235,11 @@ private struct YouTubeSession {
 @MainActor
 private var youTubeTask: Task<Void, Never>?
 @MainActor
-private var youTubeStreaming = false
+private var youTubeStreaming = false {
+    didSet {
+        DaysPace.setLive(youTubeStreaming)
+    }
+}
 @MainActor
 private var youTubeSession: YouTubeSession?
 @MainActor

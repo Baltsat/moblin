@@ -494,11 +494,16 @@ private actor DriveEngine {
         if ackedParts < committed {
             let skip = Int(session.manifest.acked) - ackedParts * drivePartSize
             var chunk = Data()
-            for index in ackedParts ..< min(ackedParts + driveChunkParts, committed) {
+            let paced = DaysPace.live
+            for index in ackedParts ..< min(ackedParts + (paced ? 1 : driveChunkParts), committed) {
                 let part = try Data(contentsOf: session.partUrl(index))
                 chunk.append(index == ackedParts ? Data(part.dropFirst(skip)) : part)
             }
+            if paced {
+                chunk = Data(chunk.prefix(DaysPace.chunkBytes))
+            }
             session.needsResync = true
+            let started = Date()
             let result = try await api.putChunk(
                 uploadUrl: uploadUrl,
                 data: chunk,
@@ -508,6 +513,10 @@ private actor DriveEngine {
             )
             session.needsResync = false
             _ = try await apply(result, to: session)
+            if paced {
+                setStatus("Google Drive: Paced for live")
+                await DaysPace.space(bytes: chunk.count, since: started)
+            }
             return true
         }
         guard session.manifest.closed else {
@@ -721,7 +730,7 @@ private actor DriveEngine {
                 daysNetStatus.queueBytes = bytes
             }
         }
-        let live = current != nil ? "recording, " : ""
+        let live = DaysPace.live ? "Paced for live, " : current != nil ? "recording, " : ""
         setStatus("Google Drive: \(live)\(pending.count) queued, \(UInt64(max(queued, 0)).formatBytes()) left")
     }
 
