@@ -260,6 +260,12 @@ private actor DriveEngine {
 
     func handle(_ input: DriveInput) {
         switch input {
+        case .resume, .background, .bgFinished, .recorderStopped, .arm, .disarm:
+            daysLog("input \(input)")
+        default:
+            break
+        }
+        switch input {
         case let .arm(info):
             armed = info
         case .disarm:
@@ -442,8 +448,13 @@ private actor DriveEngine {
     }
 
     private func drain() async {
+        daysLog("drain start sessions=\(sessions.count) bg=\(inBackground) live=\(DaysPace.live) net=\(DaysNet.shared.current.rawValue)")
+        defer { daysLog("drain end") }
         await reconcileBackground()
+        daysLog("reconciled")
         while let session = nextSession() {
+            let m = session.manifest
+            daysLog("session \(m.name) acked=\(m.acked)/\(m.bytesTotal) closed=\(m.closed) url=\(m.uploadUrl != nil) rem=\(m.remStart != nil) bgActive=\(m.bgActive) resync=\(session.needsResync)")
             guard DaysNet.shared.canUpload() else {
                 setStatus("Google Drive: waiting for network")
                 updateStatus()
@@ -456,14 +467,17 @@ private actor DriveEngine {
                 failures = 0
                 updateStatus()
             } catch DriveError.notSignedIn {
+                daysLog("not signed in")
                 setStatus("Google Drive: sign in again")
                 return
             } catch DriveError.fatal(let message) {
+                daysLog("fatal \(message)")
                 logger.info("drive: Fatal: \(message)")
                 session.manifest.failed = true
                 session.save()
                 setStatus("Google Drive: failed, \(message)")
             } catch DriveError.sessionGone {
+                daysLog("session gone \(session.manifest.name)")
                 logger.info("drive: Upload session is gone")
                 if session.manifest.acked < Int64(drivePartSize) {
                     session.manifest.uploadUrl = nil
@@ -484,6 +498,7 @@ private actor DriveEngine {
                 failures += 1
                 let delay = daysBackoff(failures)
                 logger.info("drive: Retry in \(delay) seconds after \(error)")
+                daysLog("retry in \(delay)s after \(error)")
                 setStatus("Google Drive: waiting for network, retry in \(delay) s")
                 let continuation = wakeContinuation
                 Task {
@@ -528,7 +543,9 @@ private actor DriveEngine {
         try? await syncSidecar(session, force: false)
         if session.needsResync {
             let total = session.manifest.closed ? session.manifest.bytesTotal : nil
+            daysLog("query status \(session.manifest.name)")
             let result = try await api.queryStatus(uploadUrl: uploadUrl, total: total)
+            daysLog("status result \(result)")
             session.needsResync = false
             if try await apply(result, to: session) {
                 return true
@@ -558,6 +575,7 @@ private actor DriveEngine {
             }
             session.needsResync = true
             let started = Date()
+            daysLog("put chunk \(chunk.count) at \(session.manifest.acked) paced=\(paced)")
             let result = try await api.putChunk(
                 uploadUrl: uploadUrl,
                 data: chunk,
@@ -566,6 +584,7 @@ private actor DriveEngine {
                 progress: progress(for: session)
             )
             session.needsResync = false
+            daysLog("chunk result \(result)")
             _ = try await apply(result, to: session)
             if paced {
                 setStatus("Google Drive: Paced for live")
@@ -665,6 +684,7 @@ private actor DriveEngine {
         )
         session.manifest.bgActive = true
         session.save()
+        daysLog("detached task started \(session.manifest.name) \(acked)-\(end - 1)/\(session.manifest.bytesTotal)")
         setStatus("Google Drive: uploading in background")
         return true
     }
@@ -905,6 +925,7 @@ private actor DriveEngine {
     }
 
     private func setStatus(_ text: String) {
+        daysLog("status \(text)")
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 driveStatus.text = text
@@ -917,6 +938,7 @@ final class DriveUploader: @unchecked Sendable {
     private let inputs: AsyncStream<DriveInput>.Continuation
 
     init() {
+        daysLog("DriveUploader init")
         let (stream, continuation) = makeStream(of: DriveInput.self)
         inputs = continuation
         let engine = DriveEngine()
@@ -938,6 +960,7 @@ final class DriveUploader: @unchecked Sendable {
                                                object: nil,
                                                queue: nil)
         { _ in
+            daysLog("app didEnterBackground")
             continuation.yield(.background(true))
             DaysBackgroundSync.schedule()
         }
@@ -945,6 +968,7 @@ final class DriveUploader: @unchecked Sendable {
                                                object: nil,
                                                queue: nil)
         { _ in
+            daysLog("app willEnterForeground")
             continuation.yield(.background(false))
         }
     }

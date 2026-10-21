@@ -23,6 +23,7 @@ enum DaysBackgroundSync {
     }
 
     private static func handle(_ task: BGProcessingTask) {
+        daysLog("BGProcessingTask started")
         schedule()
         nonisolated(unsafe) let task = task
         let work = Task {

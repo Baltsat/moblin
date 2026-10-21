@@ -8,6 +8,9 @@ import SwiftUI
     if text.contains("in background") {
         return daysNetStatus.kind == .wifi ? "Uploading in background on Wi-Fi" : "Waiting for Wi-Fi"
     }
+    if text.contains("storage is full") {
+        return "Drive storage is full"
+    }
     if text.contains("waiting for network") {
         return "Waiting for Wi-Fi"
     }

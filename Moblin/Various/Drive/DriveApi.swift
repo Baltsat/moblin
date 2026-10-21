@@ -72,12 +72,15 @@ final class DriveApi: Sendable {
             return
         }
         let text = String(data: data.prefix(300), encoding: .utf8) ?? ""
+        daysLog("http \(response.statusCode) \(response.url?.path ?? "") \(text.replacingOccurrences(of: "\n", with: " "))")
         switch response.statusCode {
         case 401:
             driveAuth.invalidateAccessToken()
             throw DriveError.retryable("http 401")
         case 404, 410:
             throw DriveError.sessionGone
+        case 403 where text.contains("storageQuotaExceeded"):
+            throw DriveError.retryable("storageQuotaExceeded")
         case 403, 408, 429, 500 ... 599:
             throw DriveError.retryable("http \(response.statusCode) \(text)")
         default:

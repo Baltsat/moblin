@@ -32,6 +32,7 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
     }()
 
     func attach(completionHandler: @escaping () -> Void) {
+        daysLog("handleEventsForBackgroundURLSession attach")
         lock.withLock { eventsHandler = completionHandler }
         _ = session
     }
@@ -41,7 +42,9 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
                 wifiOnly: Bool,
                 progress: (@Sendable (Int64) -> Void)?) async throws -> (HTTPURLResponse, Data)
     {
+        daysLog("upload(data) waiting for cleanup")
         await cleanup.value
+        daysLog("cleanup done")
         let file = chunkDir.appending(component: "chunk-\(UUID().uuidString).bin")
         try data.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         return try await upload(request, file: file, wifiOnly: wifiOnly, progress: progress, deleteFile: true)
@@ -62,6 +65,7 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
             }
         }
         let task = session.uploadTask(with: request, fromFile: file)
+        daysLog("task \(task.taskIdentifier) created \((try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? -1) bytes")
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 lock.withLock {
@@ -160,6 +164,7 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
     }
 
     func urlSession(_: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        daysLog("task \(task.taskIdentifier) done status=\((task.response as? HTTPURLResponse)?.statusCode ?? -1) error=\(error?.localizedDescription ?? "-")")
         guard let waiter = lock.withLock({ waiters.removeValue(forKey: task.taskIdentifier) }) else {
             if let info = detachedInfo(task) {
                 lock.withLock { _ = detachedReports.removeValue(forKey: task.taskIdentifier) }

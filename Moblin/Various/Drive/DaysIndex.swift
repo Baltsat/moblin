@@ -819,9 +819,12 @@ final class DaysIndex: ObservableObject {
                     let created = try await api.createJson(name: "iphone.json", folderId: folder, content: data)
                     UserDefaults.standard.set(created, forKey: daysIndexPhoneFileKey)
                 }
+                daysLog("index pushed")
             } catch DriveError.sessionGone {
                 UserDefaults.standard.removeObject(forKey: daysIndexPhoneFileKey)
-            } catch {}
+            } catch {
+                daysLog("index push failed \(error)")
+            }
         }
     }
 
