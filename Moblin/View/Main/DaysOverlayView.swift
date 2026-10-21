@@ -289,6 +289,7 @@ struct DaysBlackView: View {
 }
 
 @MainActor private var daysAutoStartDone = false
+@MainActor private var daysHomeShownAtLaunch = false
 
 struct DaysOverlayView: View {
     @EnvironmentObject var model: Model
@@ -359,6 +360,10 @@ struct DaysOverlayView: View {
             #endif
             model.completePendingYouTube()
             guard UserDefaults.standard.bool(forKey: DaysPrefs.autoStart), !daysAutoStartDone else {
+                if !daysHomeShownAtLaunch, !isRecording {
+                    daysHomeShownAtLaunch = true
+                    showHome = true
+                }
                 return
             }
             daysAutoStartDone = true
