@@ -122,14 +122,18 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         _: UIApplication,
         didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        true
+        DaysBackgroundSync.register()
+        return true
     }
 
     func application(_: UIApplication,
                      handleEventsForBackgroundURLSession _: String,
                      completionHandler: @escaping () -> Void)
     {
+        _ = driveUploader
+        driveUploader.setBackground(UIApplication.shared.applicationState != .active)
         DaysBackgroundUploader.shared.attach(completionHandler: completionHandler)
+        driveUploader.resume()
     }
 
     func application(_: UIApplication,

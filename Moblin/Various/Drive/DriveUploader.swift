@@ -1,8 +1,11 @@
 import Foundation
 import Network
+import UIKit
 
 private let drivePartSize = 8 * 1024 * 1024
 private let driveChunkParts = 4
+private let driveGroupBytes: Int64 = 1 << 30
+private let driveMinFreeBytes: Int64 = 300 << 20
 
 final class DriveMeter: @unchecked Sendable {
     private let lock = NSLock()
@@ -143,6 +146,10 @@ private struct DriveManifest: Codable {
     var done = false
     var failed = false
     var githubHanded: Bool?
+    var remStart: Int64?
+    var remEnd: Int64?
+    var remReady = false
+    var bgActive = false
 }
 
 private final class DriveSession {
@@ -209,6 +216,8 @@ enum DriveInput: Sendable {
     case event(type: String, detail: String)
     case localFile(String)
     case resume
+    case background(Bool)
+    case bgFinished(String)
 }
 
 private func makeStream<T: Sendable>(
@@ -227,12 +236,17 @@ private actor DriveEngine {
     private var current: DriveSession?
     private var sessions: [String: DriveSession] = [:]
     private var failures = 0
+    private var inBackground = false
     private var folderIds: [String: String] = [:]
     private var meters: [String: DriveMeter] = [:]
     private let wakeStream: AsyncStream<Void>
     private let wakeContinuation: AsyncStream<Void>.Continuation
 
     init() {
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: root.path
+        )
         let pair = makeStream(of: Void.self, policy: .bufferingNewest(1))
         wakeStream = pair.0
         wakeContinuation = pair.1
@@ -260,6 +274,18 @@ private actor DriveEngine {
             armed?.localPath = path
         case .resume:
             recover()
+            wake()
+        case let .background(value):
+            inBackground = value
+            recover()
+            wake()
+        case let .bgFinished(name):
+            recover()
+            if let session = sessions[name] {
+                session.manifest.bgActive = false
+                session.needsResync = true
+                session.save()
+            }
             wake()
         }
     }
@@ -300,7 +326,15 @@ private actor DriveEngine {
             manifest: DriveManifest(name: name, startMs: nowMs(), info: info),
             dir: dir
         )
-        FileManager.default.createFile(atPath: session.tailUrl(0).path, contents: nil)
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: dir.path
+        )
+        FileManager.default.createFile(
+            atPath: session.tailUrl(0).path,
+            contents: nil,
+            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+        )
         session.handle = try? FileHandle(forWritingTo: session.tailUrl(0))
         session.save()
         sessions[name] = session
@@ -397,7 +431,18 @@ private actor DriveEngine {
         }
     }
 
+    private func reconcileBackground() async {
+        for session in sessions.values where session.manifest.bgActive {
+            if !(await DaysBackgroundUploader.shared.hasDetached(name: session.manifest.name)) {
+                session.manifest.bgActive = false
+                session.needsResync = true
+                session.save()
+            }
+        }
+    }
+
     private func drain() async {
+        await reconcileBackground()
         while let session = nextSession() {
             guard DaysNet.shared.canUpload() else {
                 setStatus("Google Drive: waiting for network")
@@ -489,6 +534,15 @@ private actor DriveEngine {
                 return true
             }
         }
+        if session.manifest.bgActive {
+            return false
+        }
+        if session.manifest.remStart != nil {
+            return try await stepRemainder(session, uploadUrl: uploadUrl)
+        }
+        if inBackground, session.manifest.closed, !DaysPace.live, try await startBackground(session, uploadUrl: uploadUrl) {
+            return false
+        }
         let committed = current === session ? session.tailIndex : session.committedParts()
         let ackedParts = Int(session.manifest.acked) / drivePartSize
         if ackedParts < committed {
@@ -537,6 +591,115 @@ private actor DriveEngine {
         return true
     }
 
+    private func remainderUrl(_ session: DriveSession) -> URL {
+        session.dir.appending(component: "remainder.bin")
+    }
+
+    private func clearRemainder(_ session: DriveSession) {
+        try? FileManager.default.removeItem(at: remainderUrl(session))
+        session.manifest.remStart = nil
+        session.manifest.remEnd = nil
+        session.manifest.remReady = false
+        session.manifest.bgActive = false
+        session.save()
+    }
+
+    private func freeBytes() -> Int64 {
+        let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values?.volumeAvailableCapacityForImportantUsage ?? 0
+    }
+
+    private func startBackground(_ session: DriveSession, uploadUrl: String) async throws -> Bool {
+        let manifest = session.manifest
+        guard manifest.bytesTotal > manifest.acked, freeBytes() > driveMinFreeBytes else {
+            return false
+        }
+        let remaining = manifest.bytesTotal - manifest.acked
+        let end: Int64 = remaining <= driveGroupBytes
+            ? manifest.bytesTotal
+            : (manifest.acked + driveGroupBytes) / Int64(drivePartSize) * Int64(drivePartSize)
+        session.manifest.remStart = manifest.acked
+        session.manifest.remEnd = end
+        session.manifest.remReady = false
+        session.save()
+        try assemble(session)
+        return try await startDetached(session, uploadUrl: uploadUrl)
+    }
+
+    private func assemble(_ session: DriveSession) throws {
+        guard let start = session.manifest.remStart, let end = session.manifest.remEnd else {
+            return
+        }
+        try daysAssembleRemainder(
+            dir: session.dir,
+            partSize: drivePartSize,
+            committed: session.committedParts(),
+            start: start,
+            end: end,
+            out: remainderUrl(session)
+        )
+        session.manifest.remReady = true
+        session.save()
+    }
+
+    private func startDetached(_ session: DriveSession, uploadUrl: String) async throws -> Bool {
+        guard let start = session.manifest.remStart, let end = session.manifest.remEnd,
+              let url = URL(string: uploadUrl)
+        else {
+            return false
+        }
+        let acked = session.manifest.acked
+        if acked > start {
+            try daysTrimFile(remainderUrl(session), dropFirst: acked - start)
+            session.manifest.remStart = acked
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("bytes \(acked)-\(end - 1)/\(session.manifest.bytesTotal)", forHTTPHeaderField: "Content-Range")
+        request.setValue("Bearer \(try await driveAuth.accessToken())", forHTTPHeaderField: "Authorization")
+        DaysBackgroundUploader.shared.startDetached(
+            request,
+            file: remainderUrl(session),
+            name: session.manifest.name,
+            base: acked
+        )
+        session.manifest.bgActive = true
+        session.save()
+        setStatus("Google Drive: uploading in background")
+        return true
+    }
+
+    private func stepRemainder(_ session: DriveSession, uploadUrl: String) async throws -> Bool {
+        guard let start = session.manifest.remStart, let end = session.manifest.remEnd else {
+            return false
+        }
+        if !session.manifest.remReady {
+            try assemble(session)
+        }
+        if session.manifest.acked >= end {
+            clearRemainder(session)
+            return true
+        }
+        if inBackground, !DaysPace.live {
+            _ = try await startDetached(session, uploadUrl: uploadUrl)
+            return false
+        }
+        let acked = session.manifest.acked
+        let count = Int(min(Int64(driveChunkParts * drivePartSize), end - acked))
+        let chunk = try daysReadRange(remainderUrl(session), offset: acked - start, count: count)
+        session.needsResync = true
+        let result = try await api.putChunk(
+            uploadUrl: uploadUrl,
+            data: chunk,
+            offset: acked,
+            total: session.manifest.bytesTotal,
+            progress: progress(for: session)
+        )
+        session.needsResync = false
+        _ = try await apply(result, to: session)
+        return true
+    }
+
     private func progress(for session: DriveSession) -> @Sendable (Int64) -> Void {
         let name = session.manifest.name
         let meter = meters[name] ?? DriveMeter()
@@ -555,6 +718,9 @@ private actor DriveEngine {
         case let .incomplete(next):
             session.manifest.acked = next
             session.pruneParts()
+            if let end = session.manifest.remEnd, next >= end {
+                clearRemainder(session)
+            }
             updateStatus()
             return false
         case let .complete(fileId):
@@ -608,6 +774,9 @@ private actor DriveEngine {
             }
         }
         setStatus("Google Drive: uploaded \(session.manifest.name)")
+        Task { @MainActor in
+            DaysIndex.shared.refreshAndPush()
+        }
         wake()
     }
 
@@ -730,7 +899,8 @@ private actor DriveEngine {
                 daysNetStatus.queueBytes = bytes
             }
         }
-        let live = DaysPace.live ? "Paced for live, " : current != nil ? "recording, " : ""
+        let background = pending.contains { $0.manifest.bgActive }
+        let live = background ? "in background, " : DaysPace.live ? "Paced for live, " : current != nil ? "recording, " : ""
         setStatus("Google Drive: \(live)\(pending.count) queued, \(UInt64(max(queued, 0)).formatBytes()) left")
     }
 
@@ -761,6 +931,26 @@ final class DriveUploader: @unchecked Sendable {
         DaysNet.shared.observe { [continuation] in
             continuation.yield(.resume)
         }
+        DaysBackgroundUploader.shared.onDetachedComplete = { [continuation] name in
+            continuation.yield(.bgFinished(name))
+        }
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification,
+                                               object: nil,
+                                               queue: nil)
+        { _ in
+            continuation.yield(.background(true))
+            DaysBackgroundSync.schedule()
+        }
+        NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification,
+                                               object: nil,
+                                               queue: nil)
+        { _ in
+            continuation.yield(.background(false))
+        }
+    }
+
+    func setBackground(_ value: Bool) {
+        inputs.yield(.background(value))
     }
 
     func arm(info: DriveSessionInfo) {

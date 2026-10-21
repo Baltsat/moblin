@@ -395,6 +395,11 @@ final class DaysIndex: ObservableObject {
         Int64(Date().timeIntervalSince1970 * 1000)
     }
 
+    func refreshAndPush() {
+        rebuildPhone()
+        push()
+    }
+
     private func rebuildPhone() {
         let recording = model?.isRecording ?? false
         phoneRecording = recording

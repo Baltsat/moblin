@@ -5,6 +5,9 @@ import SwiftUI
     if !drive.signedIn || text.contains("sign in") {
         return "Sign in to Google"
     }
+    if text.contains("in background") {
+        return daysNetStatus.kind == .wifi ? "Uploading in background on Wi-Fi" : "Waiting for Wi-Fi"
+    }
     if text.contains("waiting for network") {
         return "Waiting for Wi-Fi"
     }
