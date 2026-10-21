@@ -6,6 +6,7 @@ private let daysDetachedPrefix = "remainder|"
 
 final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     static let shared = DaysBackgroundUploader()
+    static let lanes = 4
 
     private struct Waiter {
         let continuation: CheckedContinuation<(HTTPURLResponse, Data), Error>
@@ -14,49 +15,70 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
     }
 
     private let lock = NSLock()
-    private var waiters: [Int: Waiter] = [:]
-    private var eventsHandler: (() -> Void)?
-    private var detachedReports: [Int: (at: Date, sent: Int64, speed: Double)] = [:]
+    private var waiters: [String: Waiter] = [:]
+    private var eventsHandlers: [String: () -> Void] = [:]
+    private var detachedReports: [String: (at: Date, sent: Int64, speed: Double)] = [:]
+    private var laneSessions: [URLSession?] = Array(repeating: nil, count: DaysBackgroundUploader.lanes)
+    private var cleanupTask: Task<Void, Never>?
     var onDetachedComplete: (@Sendable (String) -> Void)?
-    private var chunkDir: URL = {
-        createAndGetDirectory(root: .cachesDirectory, name: "BackgroundChunks")
-    }()
-    private lazy var session: URLSession = {
-        let configuration = URLSessionConfiguration.background(withIdentifier: daysBackgroundIdentifier)
-        configuration.sessionSendsLaunchEvents = true
-        configuration.isDiscretionary = false
-        configuration.allowsCellularAccess = true
-        configuration.timeoutIntervalForRequest = 120
-        configuration.timeoutIntervalForResource = 6 * 3600
-        return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-    }()
+    private let chunkDir: URL = createAndGetDirectory(root: .cachesDirectory, name: "BackgroundChunks")
 
-    func attach(completionHandler: @escaping () -> Void) {
-        daysLog("handleEventsForBackgroundURLSession attach")
-        lock.withLock { eventsHandler = completionHandler }
-        _ = session
+    private func identifier(_ lane: Int) -> String {
+        lane == 0 ? daysBackgroundIdentifier : "\(daysBackgroundIdentifier).\(lane)"
+    }
+
+    private func session(_ lane: Int) -> URLSession {
+        let lane = min(max(lane, 0), DaysBackgroundUploader.lanes - 1)
+        return lock.withLock {
+            if let session = laneSessions[lane] {
+                return session
+            }
+            let configuration = URLSessionConfiguration.background(withIdentifier: identifier(lane))
+            configuration.sessionSendsLaunchEvents = true
+            configuration.isDiscretionary = false
+            configuration.allowsCellularAccess = true
+            configuration.timeoutIntervalForRequest = 120
+            configuration.timeoutIntervalForResource = 6 * 3600
+            let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+            laneSessions[lane] = session
+            return session
+        }
+    }
+
+    private func allSessions() -> [URLSession] {
+        (0 ..< DaysBackgroundUploader.lanes).map { session($0) }
+    }
+
+    private func key(_ session: URLSession, _ task: URLSessionTask) -> String {
+        "\(session.configuration.identifier ?? "")#\(task.taskIdentifier)"
+    }
+
+    func attach(identifier: String, completionHandler: @escaping () -> Void) {
+        daysLog("handleEventsForBackgroundURLSession attach \(identifier)")
+        lock.withLock { eventsHandlers[identifier] = completionHandler }
+        _ = allSessions()
     }
 
     func upload(_ request: URLRequest,
                 data: Data,
+                lane: Int = 0,
                 wifiOnly: Bool,
                 progress: (@Sendable (Int64) -> Void)?) async throws -> (HTTPURLResponse, Data)
     {
-        daysLog("upload(data) waiting for cleanup")
-        await cleanup.value
-        daysLog("cleanup done")
+        await cleanup().value
         let file = chunkDir.appending(component: "chunk-\(UUID().uuidString).bin")
-        try data.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        return try await upload(request, file: file, wifiOnly: wifiOnly, progress: progress, deleteFile: true)
+        try data.write(to: file, options: .atomic)
+        return try await upload(request, file: file, lane: lane, wifiOnly: wifiOnly, progress: progress, deleteFile: true)
     }
 
     func upload(_ request: URLRequest,
                 file: URL,
+                lane: Int = 0,
                 wifiOnly: Bool,
                 progress: (@Sendable (Int64) -> Void)?,
                 deleteFile: Bool = false) async throws -> (HTTPURLResponse, Data)
     {
-        await cleanup.value
+        await cleanup().value
         var request = request
         request.allowsCellularAccess = !wifiOnly
         defer {
@@ -64,12 +86,14 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
                 try? FileManager.default.removeItem(at: file)
             }
         }
-        let task = session.uploadTask(with: request, fromFile: file)
-        daysLog("task \(task.taskIdentifier) created \((try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? -1) bytes")
+        let laneSession = session(lane)
+        let task = laneSession.uploadTask(with: request, fromFile: file)
+        let taskKey = key(laneSession, task)
+        daysLog("task \(taskKey) created")
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 lock.withLock {
-                    waiters[task.taskIdentifier] = Waiter(continuation: continuation, progress: progress)
+                    waiters[taskKey] = Waiter(continuation: continuation, progress: progress)
                 }
                 task.resume()
             }
@@ -78,32 +102,49 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
         }
     }
 
-    private lazy var cleanup = Task { [self] in
-        let tasks = await session.allTasks
-        for task in tasks where !(task.taskDescription ?? "").hasPrefix(daysDetachedPrefix) {
-            task.cancel()
-        }
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: chunkDir.path)) ?? []
-        for name in names {
-            try? FileManager.default.removeItem(at: chunkDir.appending(component: name))
+    private func cleanup() -> Task<Void, Never> {
+        lock.withLock {
+            if let cleanupTask {
+                return cleanupTask
+            }
+            let task = Task { [self] in
+                for session in allSessions() {
+                    let tasks = await session.allTasks
+                    for task in tasks where !(task.taskDescription ?? "").hasPrefix(daysDetachedPrefix) {
+                        task.cancel()
+                    }
+                }
+                let names = (try? FileManager.default.contentsOfDirectory(atPath: chunkDir.path)) ?? []
+                for name in names {
+                    try? FileManager.default.removeItem(at: chunkDir.appending(component: name))
+                }
+                daysLog("cleanup done")
+            }
+            cleanupTask = task
+            return task
         }
     }
 
-    func startDetached(_ request: URLRequest, file: URL, name: String, base: Int64) {
+    func startDetached(_ request: URLRequest, file: URL, name: String, base: Int64, lane: Int) {
         var request = request
         request.allowsCellularAccess = false
         request.allowsExpensiveNetworkAccess = false
         request.allowsConstrainedNetworkAccess = false
-        let task = session.uploadTask(with: request, fromFile: file)
+        let task = session(lane).uploadTask(with: request, fromFile: file)
         task.taskDescription = "\(daysDetachedPrefix)\(name)|\(base)"
         task.resume()
     }
 
     func hasDetached(name: String) async -> Bool {
-        let tasks = await session.allTasks
-        return tasks.contains { task in
-            (task.taskDescription ?? "").hasPrefix("\(daysDetachedPrefix)\(name)|") && task.state != .completed
+        for session in allSessions() {
+            let tasks = await session.allTasks
+            if tasks.contains(where: { task in
+                (task.taskDescription ?? "").hasPrefix("\(daysDetachedPrefix)\(name)|") && task.state != .completed
+            }) {
+                return true
+            }
         }
+        return false
     }
 
     private func detachedInfo(_ task: URLSessionTask) -> (name: String, base: Int64)? {
@@ -117,10 +158,10 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
         return (String(parts[0]), base)
     }
 
-    private func reportDetached(_ info: (name: String, base: Int64), task: URLSessionTask, sent: Int64) {
+    private func reportDetached(_ info: (name: String, base: Int64), taskKey: String, sent: Int64) {
         let now = Date()
         let report: (at: Date, sent: Int64, speed: Double)? = lock.withLock {
-            let last = detachedReports[task.taskIdentifier]
+            let last = detachedReports[taskKey]
             let dt = last.map { now.timeIntervalSince($0.at) } ?? 99
             guard dt >= 2 else {
                 return nil
@@ -130,7 +171,7 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
                 let instant = Double(sent - last.sent) / dt
                 speed = speed == 0 ? instant : 0.7 * speed + 0.3 * instant
             }
-            detachedReports[task.taskIdentifier] = (now, sent, speed)
+            detachedReports[taskKey] = (now, sent, speed)
             return (now, sent, speed)
         }
         guard let report else {
@@ -146,28 +187,31 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
     }
 
     func start() {
-        _ = cleanup
+        _ = cleanup()
     }
 
-    func urlSession(_: URLSession, task: URLSessionTask, didSendBodyData _: Int64,
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData _: Int64,
                     totalBytesSent: Int64, totalBytesExpectedToSend _: Int64)
     {
-        let progress = lock.withLock { waiters[task.taskIdentifier]?.progress }
+        let taskKey = key(session, task)
+        let progress = lock.withLock { waiters[taskKey]?.progress }
         progress?(totalBytesSent)
         if progress == nil, let info = detachedInfo(task) {
-            reportDetached(info, task: task, sent: totalBytesSent)
+            reportDetached(info, taskKey: taskKey, sent: totalBytesSent)
         }
     }
 
-    func urlSession(_: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        lock.withLock { waiters[dataTask.taskIdentifier]?.data.append(data) }
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        let taskKey = key(session, dataTask)
+        lock.withLock { waiters[taskKey]?.data.append(data) }
     }
 
-    func urlSession(_: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        daysLog("task \(task.taskIdentifier) done status=\((task.response as? HTTPURLResponse)?.statusCode ?? -1) error=\(error?.localizedDescription ?? "-")")
-        guard let waiter = lock.withLock({ waiters.removeValue(forKey: task.taskIdentifier) }) else {
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        let taskKey = key(session, task)
+        daysLog("task \(taskKey) done status=\((task.response as? HTTPURLResponse)?.statusCode ?? -1) error=\(error?.localizedDescription ?? "-")")
+        guard let waiter = lock.withLock({ waiters.removeValue(forKey: taskKey) }) else {
             if let info = detachedInfo(task) {
-                lock.withLock { _ = detachedReports.removeValue(forKey: task.taskIdentifier) }
+                lock.withLock { _ = detachedReports.removeValue(forKey: taskKey) }
                 onDetachedComplete?(info.name)
             }
             return
@@ -181,10 +225,11 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
         }
     }
 
-    func urlSessionDidFinishEvents(forBackgroundURLSession _: URLSession) {
+    func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
         let handler = lock.withLock {
-            let handler = eventsHandler
-            eventsHandler = nil
+            let id = session.configuration.identifier ?? ""
+            let handler = eventsHandlers[id]
+            eventsHandlers[id] = nil
             return handler
         }
         guard let handler else {

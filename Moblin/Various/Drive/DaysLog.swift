@@ -15,12 +15,17 @@ final class DaysLog: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         let line = "\(formatter.string(from: Date())) \(text)\n"
-        if let handle = try? FileHandle(forWritingTo: url) {
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: Data(line.utf8))
-            try? handle.close()
-        } else {
-            try? Data(line.utf8).write(to: url, options: .completeFileProtectionUntilFirstUserAuthentication)
+        do {
+            if FileManager.default.fileExists(atPath: url.path) {
+                let handle = try FileHandle(forWritingTo: url)
+                _ = try handle.seekToEnd()
+                try handle.write(contentsOf: Data(line.utf8))
+                try handle.close()
+            } else {
+                try Data(line.utf8).write(to: url)
+            }
+        } catch {
+            logger.info("days: log write failed \(error)")
         }
         writes += 1
         if writes % 50 == 0 {

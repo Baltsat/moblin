@@ -1,7 +1,5 @@
 import Foundation
 
-private let remainderProtection = [FileAttributeKey.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
-
 func daysPartUrl(_ dir: URL, _ index: Int) -> URL {
     dir.appending(component: String(format: "part-%06d.bin", index))
 }
@@ -17,7 +15,7 @@ func daysAssembleRemainder(dir: URL, partSize: Int, committed: Int, start: Int64
     let lastPart = Int((end - 1) / size)
     let manager = FileManager.default
     if !manager.fileExists(atPath: out.path) {
-        manager.createFile(atPath: out.path, contents: nil, attributes: remainderProtection)
+        manager.createFile(atPath: out.path, contents: nil)
     }
     let handle = try FileHandle(forWritingTo: out)
     defer { try? handle.close() }
@@ -49,7 +47,7 @@ func daysTrimFile(_ file: URL, dropFirst: Int64) throws {
     let manager = FileManager.default
     let copy = file.deletingLastPathComponent().appending(component: "trim.tmp")
     try? manager.removeItem(at: copy)
-    manager.createFile(atPath: copy.path, contents: nil, attributes: remainderProtection)
+    manager.createFile(atPath: copy.path, contents: nil)
     let input = try FileHandle(forReadingFrom: file)
     let output = try FileHandle(forWritingTo: copy)
     try input.seek(toOffset: UInt64(dropFirst))

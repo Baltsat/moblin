@@ -39,7 +39,8 @@ final class DriveApi: Sendable {
 
     private func send(_ request: URLRequest, body: Data?,
                       progress: (@Sendable (Int64) -> Void)? = nil,
-                      background: Bool = false) async throws -> (HTTPURLResponse, Data) {
+                      background: Bool = false,
+                      lane: Int = 0) async throws -> (HTTPURLResponse, Data) {
         var request = request
         request.setValue("Bearer \(try await driveAuth.accessToken())", forHTTPHeaderField: "Authorization")
         do {
@@ -47,7 +48,7 @@ final class DriveApi: Sendable {
             let response: URLResponse
             if let body, background {
                 (response, data) = try await DaysBackgroundUploader.shared.upload(
-                    request, data: body, wifiOnly: DaysPrefs.isWifiOnly, progress: progress
+                    request, data: body, lane: lane, wifiOnly: DaysPrefs.isWifiOnly, progress: progress
                 )
             } else if let body {
                 (data, response) = try await session.upload(
@@ -148,6 +149,7 @@ final class DriveApi: Sendable {
                   data: Data,
                   offset: Int64,
                   total: Int64?,
+                  lane: Int = 0,
                   progress: (@Sendable (Int64) -> Void)? = nil) async throws -> DriveChunkResult
     {
         guard let url = URL(string: uploadUrl) else {
@@ -162,12 +164,12 @@ final class DriveApi: Sendable {
             let last = offset + Int64(data.count) - 1
             request.setValue("bytes \(offset)-\(last)/\(totalString)", forHTTPHeaderField: "Content-Range")
         }
-        let (response, responseData) = try await send(request, body: data, progress: progress, background: true)
+        let (response, responseData) = try await send(request, body: data, progress: progress, background: true, lane: lane)
         return try parseChunkResponse(response, responseData)
     }
 
-    func queryStatus(uploadUrl: String, total: Int64?) async throws -> DriveChunkResult {
-        try await putChunk(uploadUrl: uploadUrl, data: Data(), offset: 0, total: total)
+    func queryStatus(uploadUrl: String, total: Int64?, lane: Int = 0) async throws -> DriveChunkResult {
+        try await putChunk(uploadUrl: uploadUrl, data: Data(), offset: 0, total: total, lane: lane)
     }
 
     private func parseChunkResponse(_ response: HTTPURLResponse, _ data: Data) throws -> DriveChunkResult {

@@ -150,6 +150,7 @@ private struct DriveManifest: Codable {
     var remEnd: Int64?
     var remReady = false
     var bgActive = false
+    var lane: Int?
 }
 
 private final class DriveSession {
@@ -235,7 +236,9 @@ private actor DriveEngine {
     private var armed: DriveSessionInfo?
     private var current: DriveSession?
     private var sessions: [String: DriveSession] = [:]
-    private var failures = 0
+    private var failures: [String: Int] = [:]
+    private var workers: [String: (lane: Int, task: Task<Void, Never>)] = [:]
+    private var folderTasks: [String: Task<String, Error>] = [:]
     private var inBackground = false
     private var folderIds: [String: String] = [:]
     private var meters: [String: DriveMeter] = [:]
@@ -336,11 +339,7 @@ private actor DriveEngine {
             [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
             ofItemAtPath: dir.path
         )
-        FileManager.default.createFile(
-            atPath: session.tailUrl(0).path,
-            contents: nil,
-            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
-        )
+        FileManager.default.createFile(atPath: session.tailUrl(0).path, contents: nil)
         session.handle = try? FileHandle(forWritingTo: session.tailUrl(0))
         session.save()
         sessions[name] = session
@@ -448,76 +447,114 @@ private actor DriveEngine {
     }
 
     private func drain() async {
-        daysLog("drain start sessions=\(sessions.count) bg=\(inBackground) live=\(DaysPace.live) net=\(DaysNet.shared.current.rawValue)")
-        defer { daysLog("drain end") }
         await reconcileBackground()
-        daysLog("reconciled")
-        while let session = nextSession() {
-            let m = session.manifest
-            daysLog("session \(m.name) acked=\(m.acked)/\(m.bytesTotal) closed=\(m.closed) url=\(m.uploadUrl != nil) rem=\(m.remStart != nil) bgActive=\(m.bgActive) resync=\(session.needsResync)")
+        guard DaysNet.shared.canUpload() else {
+            if sessions.values.contains(where: { !$0.manifest.done && !$0.manifest.failed }) {
+                setStatus("Google Drive: waiting for network")
+            }
+            updateStatus()
+            return
+        }
+        let eligible = sessions.values
+            .filter { !$0.manifest.done && !$0.manifest.failed && !$0.manifest.bgActive && workers[$0.manifest.name] == nil }
+            .sorted { $0.manifest.name < $1.manifest.name }
+        let detached = sessions.values.filter { $0.manifest.bgActive }.count
+        var free = (DaysPace.live ? 1 : DaysBackgroundUploader.lanes) - workers.count - detached
+        for session in eligible where free > 0 {
+            guard let lane = freeLane() else {
+                break
+            }
+            free -= 1
+            let name = session.manifest.name
+            daysLog("worker start \(name) lane=\(lane) acked=\(session.manifest.acked)/\(session.manifest.bytesTotal)")
+            workers[name] = (lane, Task { await self.work(session, lane: lane) })
+        }
+        updateStatus()
+    }
+
+    private func freeLane() -> Int? {
+        var used = Set(workers.values.map(\.lane))
+        for session in sessions.values where session.manifest.bgActive {
+            if let lane = session.manifest.lane {
+                used.insert(lane)
+            }
+        }
+        return (0 ..< DaysBackgroundUploader.lanes).first { !used.contains($0) }
+    }
+
+    private func work(_ session: DriveSession, lane: Int) async {
+        let name = session.manifest.name
+        session.manifest.lane = lane
+        var restart = false
+        loop: while true {
             guard DaysNet.shared.canUpload() else {
                 setStatus("Google Drive: waiting for network")
-                updateStatus()
-                return
+                break
+            }
+            if DaysPace.live, lane != 0 {
+                break
             }
             do {
-                guard try await step(session) else {
-                    return
+                guard try await step(session, lane: lane) else {
+                    break
                 }
-                failures = 0
+                failures[name] = 0
                 updateStatus()
             } catch DriveError.notSignedIn {
                 daysLog("not signed in")
                 setStatus("Google Drive: sign in again")
-                return
+                break
             } catch DriveError.fatal(let message) {
                 daysLog("fatal \(message)")
                 logger.info("drive: Fatal: \(message)")
                 session.manifest.failed = true
                 session.save()
                 setStatus("Google Drive: failed, \(message)")
+                restart = true
+                break
             } catch DriveError.sessionGone {
-                daysLog("session gone \(session.manifest.name)")
+                daysLog("session gone \(name)")
                 logger.info("drive: Upload session is gone")
                 if session.manifest.acked < Int64(drivePartSize) {
                     session.manifest.uploadUrl = nil
                     session.manifest.acked = 0
                     session.needsResync = false
                     session.save()
-                    continue
+                    continue loop
                 }
                 session.manifest.failed = true
                 session.save()
                 if session.manifest.closed, session.manifest.info.localPath != nil {
                     try? FileManager.default.removeItem(at: session.dir)
-                    sessions[session.manifest.name] = nil
+                    sessions[name] = nil
                 }
                 setStatus("Google Drive: upload session lost, kept the local recording")
+                restart = true
+                break
             } catch {
                 session.needsResync = true
-                failures += 1
-                let delay = daysBackoff(failures)
+                failures[name, default: 0] += 1
+                let full = "\(error)".contains("storageQuotaExceeded")
+                let delay = full ? 300 : daysBackoff(failures[name] ?? 1)
                 logger.info("drive: Retry in \(delay) seconds after \(error)")
-                daysLog("retry in \(delay)s after \(error)")
-                setStatus("Google Drive: waiting for network, retry in \(delay) s")
+                daysLog("retry \(name) in \(delay)s after \(error)")
+                setStatus(full ? "Google Drive: storage is full" : "Google Drive: waiting for network, retry in \(delay) s")
                 let continuation = wakeContinuation
                 Task {
                     try? await Task.sleep(for: .seconds(delay))
                     continuation.yield()
                 }
-                return
+                break
             }
         }
-        updateStatus()
+        daysLog("worker end \(name) acked=\(session.manifest.acked)")
+        workers[name] = nil
+        if restart || session.manifest.done || session.manifest.bgActive {
+            wake()
+        }
     }
 
-    private func nextSession() -> DriveSession? {
-        sessions.values
-            .filter { !$0.manifest.done && !$0.manifest.failed }
-            .min { $0.manifest.name < $1.manifest.name }
-    }
-
-    private func step(_ session: DriveSession) async throws -> Bool {
+    private func step(_ session: DriveSession, lane: Int) async throws -> Bool {
         guard driveAuth.isSignedIn else {
             throw DriveError.notSignedIn
         }
@@ -544,7 +581,7 @@ private actor DriveEngine {
         if session.needsResync {
             let total = session.manifest.closed ? session.manifest.bytesTotal : nil
             daysLog("query status \(session.manifest.name)")
-            let result = try await api.queryStatus(uploadUrl: uploadUrl, total: total)
+            let result = try await api.queryStatus(uploadUrl: uploadUrl, total: total, lane: lane)
             daysLog("status result \(result)")
             session.needsResync = false
             if try await apply(result, to: session) {
@@ -555,9 +592,9 @@ private actor DriveEngine {
             return false
         }
         if session.manifest.remStart != nil {
-            return try await stepRemainder(session, uploadUrl: uploadUrl)
+            return try await stepRemainder(session, uploadUrl: uploadUrl, lane: lane)
         }
-        if inBackground, session.manifest.closed, !DaysPace.live, try await startBackground(session, uploadUrl: uploadUrl) {
+        if inBackground, session.manifest.closed, !DaysPace.live, try await startBackground(session, uploadUrl: uploadUrl, lane: lane) {
             return false
         }
         let committed = current === session ? session.tailIndex : session.committedParts()
@@ -581,6 +618,7 @@ private actor DriveEngine {
                 data: chunk,
                 offset: session.manifest.acked,
                 total: nil,
+                lane: lane,
                 progress: progress(for: session)
             )
             session.needsResync = false
@@ -603,6 +641,7 @@ private actor DriveEngine {
             data: Data(tail.dropFirst(skip)),
             offset: session.manifest.acked,
             total: session.manifest.bytesTotal,
+            lane: lane,
             progress: progress(for: session)
         )
         session.needsResync = false
@@ -628,7 +667,7 @@ private actor DriveEngine {
         return values?.volumeAvailableCapacityForImportantUsage ?? 0
     }
 
-    private func startBackground(_ session: DriveSession, uploadUrl: String) async throws -> Bool {
+    private func startBackground(_ session: DriveSession, uploadUrl: String, lane: Int) async throws -> Bool {
         let manifest = session.manifest
         guard manifest.bytesTotal > manifest.acked, freeBytes() > driveMinFreeBytes else {
             return false
@@ -642,7 +681,7 @@ private actor DriveEngine {
         session.manifest.remReady = false
         session.save()
         try assemble(session)
-        return try await startDetached(session, uploadUrl: uploadUrl)
+        return try await startDetached(session, uploadUrl: uploadUrl, lane: lane)
     }
 
     private func assemble(_ session: DriveSession) throws {
@@ -661,7 +700,7 @@ private actor DriveEngine {
         session.save()
     }
 
-    private func startDetached(_ session: DriveSession, uploadUrl: String) async throws -> Bool {
+    private func startDetached(_ session: DriveSession, uploadUrl: String, lane: Int) async throws -> Bool {
         guard let start = session.manifest.remStart, let end = session.manifest.remEnd,
               let url = URL(string: uploadUrl)
         else {
@@ -680,7 +719,8 @@ private actor DriveEngine {
             request,
             file: remainderUrl(session),
             name: session.manifest.name,
-            base: acked
+            base: acked,
+            lane: lane
         )
         session.manifest.bgActive = true
         session.save()
@@ -689,7 +729,7 @@ private actor DriveEngine {
         return true
     }
 
-    private func stepRemainder(_ session: DriveSession, uploadUrl: String) async throws -> Bool {
+    private func stepRemainder(_ session: DriveSession, uploadUrl: String, lane: Int) async throws -> Bool {
         guard let start = session.manifest.remStart, let end = session.manifest.remEnd else {
             return false
         }
@@ -701,7 +741,7 @@ private actor DriveEngine {
             return true
         }
         if inBackground, !DaysPace.live {
-            _ = try await startDetached(session, uploadUrl: uploadUrl)
+            _ = try await startDetached(session, uploadUrl: uploadUrl, lane: lane)
             return false
         }
         let acked = session.manifest.acked
@@ -713,6 +753,7 @@ private actor DriveEngine {
             data: chunk,
             offset: acked,
             total: session.manifest.bytesTotal,
+            lane: lane,
             progress: progress(for: session)
         )
         session.needsResync = false
@@ -824,7 +865,14 @@ private actor DriveEngine {
         if let id = folderIds[key] {
             return id
         }
-        let id = try await api.findOrCreateFolder(name: name, parentId: parent)
+        if let task = folderTasks[key] {
+            return try await task.value
+        }
+        let api = api
+        let task = Task { try await api.findOrCreateFolder(name: name, parentId: parent) }
+        folderTasks[key] = task
+        defer { folderTasks[key] = nil }
+        let id = try await task.value
         folderIds[key] = id
         return id
     }

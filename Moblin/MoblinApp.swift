@@ -127,12 +127,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     func application(_: UIApplication,
-                     handleEventsForBackgroundURLSession _: String,
+                     handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void)
     {
         _ = driveUploader
         driveUploader.setBackground(UIApplication.shared.applicationState != .active)
-        DaysBackgroundUploader.shared.attach(completionHandler: completionHandler)
+        DaysBackgroundUploader.shared.attach(identifier: identifier, completionHandler: completionHandler)
         driveUploader.resume()
     }
 

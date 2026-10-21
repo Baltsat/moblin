@@ -717,6 +717,27 @@ final class DaysIndex: ObservableObject {
         }
     }
 
+    private func localRecordings() -> [(url: URL, ms: Int64)] {
+        let dir = URL.documentsDirectory.appending(component: "Recordings")
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Asia/Makassar")
+        formatter.dateFormat = "yyyy-MM-dd_HHmmss"
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        return names.compactMap { name -> (URL, Int64)? in
+            guard name.hasPrefix("Recording_"), name.hasSuffix(".mp4"),
+                  let date = formatter.date(from: String(name.dropFirst(10).dropLast(4)))
+            else {
+                return nil
+            }
+            return (dir.appending(component: name), Int64(date.timeIntervalSince1970 * 1000))
+        }
+    }
+
+    private func localFile(for scene: DaysRawScene, in files: [(url: URL, ms: Int64)]) -> URL? {
+        files.first { abs($0.ms - scene.startMs) < 90000 }?.url
+    }
+
     private func resolveDurations() {
         guard !fixtures, !resolving, driveAuth.isSignedIn else {
             return
@@ -724,32 +745,38 @@ final class DaysIndex: ObservableObject {
         let ends = UserDefaults.standard.dictionary(forKey: daysIndexEndsKey) as? [String: Int64] ?? [:]
         let durations = UserDefaults.standard.dictionary(forKey: daysIndexDurationsKey) as? [String: Double] ?? [:]
         var tries = UserDefaults.standard.dictionary(forKey: daysIndexDurTriesKey) as? [String: Int] ?? [:]
+        let files = localRecordings()
         let candidate = phone.scenes.reversed().first { scene in
             guard let angle = scene.angles.first else {
                 return false
             }
+            let local = localFile(for: scene, in: files) != nil
+            let remote = angle.driveId != nil && angle.bytes > 0 && angle.uploaded >= angle.bytes
             return scene.endMs != nil && scene.endEst && ends[scene.session] == nil
-                && durations[scene.session] == nil && angle.driveId != nil && angle.bytes > 0
-                && angle.uploaded >= angle.bytes && (tries[scene.session] ?? 0) < 3
+                && durations[scene.session] == nil && (local || remote) && (tries[scene.session] ?? 0) < 3
         }
-        guard let candidate, let driveId = candidate.angles.first?.driveId else {
+        guard let candidate else {
             return
         }
+        let local = localFile(for: candidate, in: files)
+        let driveId = candidate.angles.first?.driveId
         resolving = true
         tries[candidate.session] = (tries[candidate.session] ?? 0) + 1
         UserDefaults.standard.set(tries, forKey: daysIndexDurTriesKey)
         Task {
             defer { resolving = false }
-            guard let token = try? await driveAuth.accessToken(),
-                  let seconds = await daysDriveDuration(fileId: driveId, token: token)
+            guard let asset = await daysAsset(local: local, driveId: driveId),
+                  let seconds = await daysAssetDuration(asset)
             else {
                 return
             }
             var all = UserDefaults.standard.dictionary(forKey: daysIndexDurationsKey) as? [String: Double] ?? [:]
             all[candidate.session] = seconds
             UserDefaults.standard.set(all, forKey: daysIndexDurationsKey)
+            daysLog("duration \(candidate.session) \(seconds)s local=\(local != nil)")
             rebuildPhone()
             push()
+            resolveDurations()
         }
     }
 
@@ -758,26 +785,31 @@ final class DaysIndex: ObservableObject {
             return
         }
         var tries = UserDefaults.standard.dictionary(forKey: daysThumbTriesKey) as? [String: Int] ?? [:]
+        let files = localRecordings()
         let candidate = phone.scenes.reversed().first { scene in
             guard let angle = scene.angles.first else {
                 return false
             }
-            return scene.endMs != nil && angle.driveId != nil && angle.thumbs.isEmpty && angle.bytes > 0
-                && angle.uploaded >= angle.bytes && (tries[scene.session] ?? 0) < 3
-                && thumbsMap[angle.driveId ?? ""] == nil
+            let local = localFile(for: scene, in: files) != nil
+            let remote = angle.driveId != nil && angle.bytes > 0 && angle.uploaded >= angle.bytes
+            return scene.endMs != nil && angle.thumbs.isEmpty && (local || remote)
+                && (tries[scene.session] ?? 0) < 3 && thumbsMap[angle.driveId ?? ""] == nil
         }
-        guard let candidate, let driveId = candidate.angles.first?.driveId else {
+        guard let candidate else {
             return
         }
+        let local = localFile(for: candidate, in: files)
+        let driveId = candidate.angles.first?.driveId
         generating = true
         tries[candidate.session] = (tries[candidate.session] ?? 0) + 1
         UserDefaults.standard.set(tries, forKey: daysThumbTriesKey)
         Task {
             defer { generating = false }
-            guard let token = try? await driveAuth.accessToken(), let folder = try? await thumbFolderId() else {
+            guard let folder = try? await thumbFolderId(), let asset = await daysAsset(local: local, driveId: driveId) else {
+                daysLog("thumbs \(candidate.session): no asset or folder")
                 return
             }
-            let frames = await daysDriveFrames(fileId: driveId, token: token)
+            let frames = await daysAssetFrames(asset)
             var ids: [String] = []
             for (number, frame) in frames.enumerated() {
                 if let id = try? await api.createFile(name: "\(candidate.session)_phone_\(number + 1).jpg",
@@ -788,6 +820,7 @@ final class DaysIndex: ObservableObject {
                     ids.append(id)
                 }
             }
+            daysLog("thumbs \(candidate.session): frames=\(frames.count) uploaded=\(ids.count) local=\(local != nil)")
             guard !ids.isEmpty else {
                 return
             }
@@ -796,6 +829,7 @@ final class DaysIndex: ObservableObject {
             UserDefaults.standard.set(all, forKey: daysIndexThumbsKey)
             rebuildPhone()
             push()
+            generatePhoneThumbs()
         }
     }
 
@@ -944,23 +978,27 @@ final class DaysThumbs {
     }
 }
 
-func daysDriveDuration(fileId: String, token: String) async -> Double? {
-    guard let url = URL(string: "https://www.googleapis.com/drive/v3/files/\(fileId)?alt=media") else {
+func daysAsset(local: URL?, driveId: String?) async -> AVURLAsset? {
+    if let local {
+        return AVURLAsset(url: local)
+    }
+    guard let driveId, let token = try? await driveAuth.accessToken(),
+          let url = URL(string: "https://www.googleapis.com/drive/v3/files/\(driveId)?alt=media")
+    else {
         return nil
     }
-    let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "Bearer \(token)"]])
-    guard let duration = try? await asset.load(.duration), duration.seconds.isFinite, duration.seconds > 0 else {
+    return AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "Bearer \(token)"]])
+}
+
+func daysAssetDuration(_ asset: AVURLAsset) async -> Double? {
+    guard let duration = try? await asset.load(.duration), duration.seconds.isFinite, duration.seconds > 1 else {
         return nil
     }
     return duration.seconds
 }
 
-func daysDriveFrames(fileId: String, token: String) async -> [Data] {
-    guard let url = URL(string: "https://www.googleapis.com/drive/v3/files/\(fileId)?alt=media") else {
-        return []
-    }
-    let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "Bearer \(token)"]])
-    guard let duration = try? await asset.load(.duration), duration.seconds > 1 else {
+func daysAssetFrames(_ asset: AVURLAsset) async -> [Data] {
+    guard let seconds = await daysAssetDuration(asset) else {
         return []
     }
     let generator = AVAssetImageGenerator(asset: asset)
@@ -970,7 +1008,7 @@ func daysDriveFrames(fileId: String, token: String) async -> [Data] {
     generator.requestedTimeToleranceAfter = .positiveInfinity
     var frames: [Data] = []
     for fraction in [0.05, 0.5, 0.95] {
-        let time = CMTime(seconds: duration.seconds * fraction, preferredTimescale: 600)
+        let time = CMTime(seconds: seconds * fraction, preferredTimescale: 600)
         if let (image, _) = try? await generator.image(at: time),
            let jpeg = await daysThumbJpeg(UIImage(cgImage: image))
         {
