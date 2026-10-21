@@ -148,9 +148,19 @@ private struct DriveManifest: Codable {
     var githubHanded: Bool?
     var remStart: Int64?
     var remEnd: Int64?
-    var remReady = false
-    var bgActive = false
+    var remReadyStored: Bool?
+    var bgActiveStored: Bool?
     var lane: Int?
+
+    var remReady: Bool {
+        get { remReadyStored ?? false }
+        set { remReadyStored = newValue }
+    }
+
+    var bgActive: Bool {
+        get { bgActiveStored ?? false }
+        set { bgActiveStored = newValue }
+    }
 }
 
 private final class DriveSession {
@@ -240,6 +250,7 @@ private actor DriveEngine {
     private var workers: [String: (lane: Int, task: Task<Void, Never>)] = [:]
     private var folderTasks: [String: Task<String, Error>] = [:]
     private var inBackground = false
+    private var lastStatus = ""
     private var folderIds: [String: String] = [:]
     private var meters: [String: DriveMeter] = [:]
     private let wakeStream: AsyncStream<Void>
@@ -263,7 +274,7 @@ private actor DriveEngine {
 
     func handle(_ input: DriveInput) {
         switch input {
-        case .resume, .background, .bgFinished, .recorderStopped, .arm, .disarm:
+        case .background, .bgFinished, .recorderStopped, .arm, .disarm:
             daysLog("input \(input)")
         default:
             break
@@ -413,9 +424,14 @@ private actor DriveEngine {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         for name in names.sorted() where sessions[name] == nil {
             let dir = root.appending(component: name)
-            guard let data = try? Data(contentsOf: dir.appending(component: "manifest.json")),
-                  let manifest = try? JSONDecoder().decode(DriveManifest.self, from: data)
-            else {
+            guard let data = try? Data(contentsOf: dir.appending(component: "manifest.json")) else {
+                continue
+            }
+            let manifest: DriveManifest
+            do {
+                manifest = try JSONDecoder().decode(DriveManifest.self, from: data)
+            } catch {
+                daysLog("manifest decode failed \(name): \(error)")
                 continue
             }
             if manifest.done {
@@ -433,6 +449,7 @@ private actor DriveEngine {
                 session.save()
             }
             sessions[name] = session
+            daysLog("recovered \(name) acked=\(manifest.acked)/\(manifest.bytesTotal) closed=\(manifest.closed)")
         }
     }
 
@@ -973,7 +990,10 @@ private actor DriveEngine {
     }
 
     private func setStatus(_ text: String) {
-        daysLog("status \(text)")
+        if text != lastStatus {
+            lastStatus = text
+            daysLog("status \(text)")
+        }
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 driveStatus.text = text
