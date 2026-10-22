@@ -242,7 +242,7 @@ private func makeStream<T: Sendable>(
 
 private actor DriveEngine {
     private let api = DriveApi()
-    private let root = createAndGetDirectory(name: "DriveOutbox")
+    private let root = createAndGetDirectoryWithoutBackup(name: "DriveOutbox")
     private var armed: DriveSessionInfo?
     private var current: DriveSession?
     private var sessions: [String: DriveSession] = [:]

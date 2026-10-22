@@ -81,4 +81,12 @@ func createAndGetDirectory(root: URL = .documentsDirectory, name: String...) -> 
     return directory
 }
 
+func createAndGetDirectoryWithoutBackup(name: String) -> URL {
+    var directory = createAndGetDirectory(name: name)
+    var values = URLResourceValues()
+    values.isExcludedFromBackup = true
+    try? directory.setResourceValues(values)
+    return directory
+}
+
 let moblinSettingsFileType = UTType(exportedAs: "com.eerimoq.moblin.settings", conformingTo: .data)

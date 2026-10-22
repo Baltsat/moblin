@@ -1,7 +1,7 @@
 import Foundation
 
 private func getRecordingsDirectory() -> URL {
-    createAndGetDirectory(name: "Recordings")
+    createAndGetDirectoryWithoutBackup(name: "Recordings")
 }
 
 private func loadRecordingPath(settings: SettingsStreamRecording?) -> URL? {
