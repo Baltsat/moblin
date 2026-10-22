@@ -132,6 +132,7 @@ final class DaysSprites {
         let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("DaysSprites")
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        excludeFromBackup(url)
         return url
     }()
 

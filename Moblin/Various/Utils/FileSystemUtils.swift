@@ -81,6 +81,13 @@ func createAndGetDirectory(root: URL = .documentsDirectory, name: String...) -> 
     return directory
 }
 
+func excludeFromBackup(_ url: URL) {
+    var url = url
+    var values = URLResourceValues()
+    values.isExcludedFromBackup = true
+    try? url.setResourceValues(values)
+}
+
 func createAndGetDirectoryWithoutBackup(name: String) -> URL {
     var directory = createAndGetDirectory(name: name)
     var values = URLResourceValues()

@@ -87,6 +87,7 @@ struct DaysHomeView: View {
                     ForEach(index.seasons) { season in
                         seasonSection(season)
                     }
+                    settingsRow
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 8)
@@ -108,6 +109,9 @@ struct DaysHomeView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             #if DEBUG
+                if let day = UserDefaults.standard.string(forKey: "DaysOpenDay"), path.isEmpty {
+                    path = [.day(day)]
+                }
                 if UserDefaults.standard.bool(forKey: "DaysOpenUploads"), path.isEmpty {
                     path = [.uploads]
                 }
@@ -198,11 +202,31 @@ struct DaysHomeView: View {
         if !index.today.scenes.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 DaysCaption(text: "TODAY")
-                ForEach(index.today.scenes.reversed()) { scene in
-                    DaysSceneCard(scene: scene, tz: index.tz) { path.append(.scene(scene.id)) }
-                }
+                DaysSceneList(scenes: index.today.scenes, tz: index.tz) { path.append(.scene($0)) }
             }
         }
+    }
+
+    private var settingsRow: some View {
+        Button {
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                model.toggleShowingPanel(type: nil, panel: .settings)
+            }
+        } label: {
+            HStack {
+                Text("Settings").font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(DaysUI.muted)
+            .frame(height: 52)
+            .contentShape(Rectangle())
+            .overlay(alignment: .top) {
+                Rectangle().fill(DaysUI.line).frame(height: 1)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var weekSection: some View {
@@ -412,10 +436,14 @@ struct DaysScrubThumb: View {
                         if fraction == nil, abs(value.translation.height) > abs(value.translation.width) {
                             return
                         }
+                        DaysScrubState.shared.active = true
                         fraction = min(max(value.location.x / width, 0), 1)
                     }
                     .onEnded { _ in
                         fraction = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            DaysScrubState.shared.active = false
+                        }
                     }
             )
             .gesture(
@@ -455,6 +483,7 @@ struct DaysAngleLink<Content: View>: View {
 struct DaysSceneCard: View {
     let scene: DaysScene
     let tz: TimeZone
+    var height: CGFloat = 150
     let open: () -> Void
 
     var body: some View {
@@ -473,17 +502,8 @@ struct DaysSceneCard: View {
                         DaysThumb(id: nil, label: "Scene")
                     }
                 }
-                .frame(height: 150)
+                .frame(height: height)
                 .frame(maxWidth: .infinity)
-                .overlay(alignment: .bottomLeading) {
-                    Text(verbatim: "\(scene.number)")
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .shadow(color: .black.opacity(0.6), radius: 6, y: 2)
-                        .padding(.leading, 14)
-                        .padding(.bottom, 10)
-                        .allowsHitTesting(false)
-                }
                 if let second {
                     DaysAngleLink(youtube: second.youtube) {
                         DaysThumb(id: second.thumbs.last, label: second.label)
@@ -496,14 +516,20 @@ struct DaysSceneCard: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 14))
             Button(action: open) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Scene \(scene.number)").font(.system(size: 16, weight: .semibold))
-                    Spacer()
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("SCENE \(scene.number)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(DaysUI.dim)
+                    Text(scene.title ?? "Scene \(scene.number)")
+                        .font(.system(size: 17, weight: .semibold))
+                        .lineLimit(1)
                     Text("\(daysClock(scene.startMs, tz: tz)) \u{00B7} \(daysDuration(ms)) \u{00B7} \(labels)")
                         .font(.system(size: 13))
                         .foregroundStyle(DaysUI.muted)
                         .lineLimit(1)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -511,22 +537,146 @@ struct DaysSceneCard: View {
     }
 }
 
+struct DaysSceneList: View {
+    let scenes: [DaysScene]
+    let tz: TimeZone
+    let open: (String) -> Void
+    @State private var shortExpanded = false
+
+    var body: some View {
+        let now = daysNow()
+        let full = scenes.filter { !$0.isShort(now: now) }.reversed() as [DaysScene]
+        let short = scenes.filter { $0.isShort(now: now) }.reversed() as [DaysScene]
+        return VStack(alignment: .leading, spacing: 14) {
+            if full.count > 3 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 14) {
+                        ForEach(full) { scene in
+                            DaysSceneCard(scene: scene, tz: tz, height: 172) { open(scene.id) }
+                                .frame(width: 300)
+                        }
+                    }
+                }
+            } else {
+                ForEach(full) { scene in
+                    DaysSceneCard(scene: scene, tz: tz) { open(scene.id) }
+                }
+            }
+            if !short.isEmpty {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        shortExpanded.toggle()
+                    }
+                } label: {
+                    HStack {
+                        Text("\(short.count) short clip\(short.count == 1 ? "" : "s")")
+                            .font(.system(size: 14, weight: .semibold))
+                        Spacer()
+                        Image(systemName: shortExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(DaysUI.muted)
+                    .frame(height: 40)
+                    .contentShape(Rectangle())
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(DaysUI.line).frame(height: 1)
+                    }
+                }
+                .buttonStyle(.plain)
+                if shortExpanded {
+                    ForEach(short) { scene in
+                        Button {
+                            open(scene.id)
+                        } label: {
+                            HStack {
+                                Text("\(daysClock(scene.startMs, tz: tz)) \u{00B7} \(scene.durationMs(now: now) / 1000) s")
+                                    .font(.system(size: 13).monospacedDigit())
+                                Spacer()
+                                Text(scene.present.map(\.label).joined(separator: " + "))
+                                    .font(.system(size: 12))
+                            }
+                            .foregroundStyle(DaysUI.dim)
+                            .frame(height: 32)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@MainActor
+final class DaysScrubState {
+    static let shared = DaysScrubState()
+    var active = false
+}
+
+struct DaysBackButton: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.left").font(.system(size: 16, weight: .semibold))
+                Text(title).font(.system(size: 17, weight: .semibold))
+            }
+            .foregroundStyle(DaysUI.muted)
+            .frame(minWidth: 88, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct DaysSwipeBack: UIViewControllerRepresentable {
+    final class Holder: UIViewController {
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            navigationController?.interactivePopGestureRecognizer?.delegate = nil
+            navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+        }
+    }
+
+    func makeUIViewController(context _: Context) -> Holder {
+        Holder()
+    }
+
+    func updateUIViewController(_: Holder, context _: Context) {}
+}
+
 struct DaysDayView: View {
     @ObservedObject var index: DaysIndex
-    let episodeId: String
+    @State var episodeId: String
     let open: (String) -> Void
     @Environment(\.dismiss) private var dismiss
+
+    private var withFootage: [DaysEpisode] {
+        index.seasons.flatMap(\.episodes).filter { !$0.scenes.isEmpty }
+    }
+
+    private func move(_ offset: Int) {
+        let list = withFootage
+        guard let position = list.firstIndex(where: { $0.id == episodeId }) else {
+            return
+        }
+        let target = position + offset
+        guard list.indices.contains(target) else {
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            episodeId = list[target].id
+        }
+    }
 
     var body: some View {
         let episode = index.episode(episodeId)
         return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Button {
+                DaysBackButton(title: "Season \(episode?.season ?? 1)") {
                     dismiss()
-                } label: {
-                    Text(verbatim: "\u{2039} Days")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(DaysUI.muted)
                 }
                 if let episode {
                     VStack(alignment: .leading, spacing: 4) {
@@ -537,17 +687,28 @@ struct DaysDayView: View {
                             .font(.system(size: 14))
                             .foregroundStyle(DaysUI.muted)
                     }
-                    ForEach(episode.scenes.reversed()) { scene in
-                        DaysSceneCard(scene: scene, tz: index.tz) { open(scene.id) }
-                    }
+                    DaysSceneList(scenes: episode.scenes, tz: index.tz, open: open)
                 }
             }
             .padding(.horizontal, 22)
-            .padding(.top, 8)
+            .padding(.top, 4)
             .padding(.bottom, 40)
+            .id(episodeId)
         }
         .background(DaysUI.bg.ignoresSafeArea())
+        .background(DaysSwipeBack())
         .navigationBarHidden(true)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 40).onEnded { value in
+                guard value.startLocation.x > 24, !DaysScrubState.shared.active,
+                      abs(value.translation.width) > 80,
+                      abs(value.translation.width) > abs(value.translation.height) * 1.5
+                else {
+                    return
+                }
+                move(value.translation.width > 0 ? 1 : -1)
+            }
+        )
     }
 }
 

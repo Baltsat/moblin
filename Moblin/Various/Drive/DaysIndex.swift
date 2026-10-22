@@ -19,7 +19,7 @@ private let daysThumbTriesKey = "daysIndexThumbTries2"
 private let daysIndexThumbFolderKey = "daysIndexThumbFolderId"
 private let daysStaleMs: Int64 = 180_000
 private let daysMergeGapMs: Int64 = 10000
-private let daysPremiere = (year: 2026, month: 10, day: 12)
+private let daysPremiere = (year: 2026, month: 10, day: 19)
 
 private func daysNull(_ value: String?) -> Any {
     if let value {
@@ -74,6 +74,7 @@ struct DaysRawIndex {
     var updatedMs: Int64
     var live: DaysRawLive?
     var scenes: [DaysRawScene]
+    var titles: [String: String] = [:]
 
     init(device: String, tz: String, updatedMs: Int64, live: DaysRawLive?, scenes: [DaysRawScene]) {
         self.device = device
@@ -88,6 +89,7 @@ struct DaysRawIndex {
             return nil
         }
         device = root["device"] as? String ?? ""
+        titles = root["titles"] as? [String: String] ?? [:]
         tz = root["tz"] as? String ?? TimeZone.current.identifier
         updatedMs = (root["updated_ms"] as? NSNumber)?.int64Value ?? 0
         if let live = root["live"] as? [String: Any] {
@@ -183,6 +185,12 @@ struct DaysScene: Identifiable {
     var angles: [DaysAngle]
     var number = 0
     var live: Bool
+    var sessions: [String] = []
+    var title: String?
+
+    func isShort(now: Int64) -> Bool {
+        endMs != nil && durationMs(now: now) < 60000
+    }
 
     var safe: Bool {
         endMs != nil && angles.allSatisfy { $0.bytes > 0 && $0.uploaded >= $0.bytes }
@@ -314,6 +322,7 @@ final class DaysIndex: ObservableObject {
         guard self.model == nil else {
             return
         }
+        daysLog("build titles-shorts-nav season1=2026-10-19")
         self.model = model
         #if DEBUG
             if UserDefaults.standard.bool(forKey: "DaysPortrait") {
@@ -589,14 +598,20 @@ final class DaysIndex: ObservableObject {
                     last.endMs = nil
                 }
                 last.live = last.live || isLive
+                last.sessions.append(scene.session)
                 merged[merged.count - 1] = last
             } else {
                 merged.append(DaysScene(id: scene.session,
                                         startMs: scene.startMs,
                                         endMs: scene.endMs,
                                         angles: scene.angles,
-                                        live: isLive))
+                                        live: isLive,
+                                        sessions: [scene.session]))
             }
+        }
+        let titles = mac?.titles ?? [:]
+        for index in merged.indices {
+            merged[index].title = merged[index].sessions.compactMap { titles[$0] }.first { !$0.isEmpty }
         }
         var byDay: [Date: [DaysScene]] = [:]
         for scene in merged {
@@ -1115,6 +1130,7 @@ final class DaysThumbs {
         let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("DaysThumbs")
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        excludeFromBackup(url)
         return url
     }()
 

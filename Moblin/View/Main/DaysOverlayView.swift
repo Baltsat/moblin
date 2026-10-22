@@ -379,9 +379,6 @@ struct DaysOverlayView: View {
             DaysRoundButton(systemName: "film.stack", size: rec ? 40 : 44) {
                 showHome = true
             }
-            DaysRoundButton(systemName: "gearshape", size: rec ? 40 : 44) {
-                model.toggleShowingPanel(type: nil, panel: .settings)
-            }
         }
     }
 

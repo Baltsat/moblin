@@ -9,12 +9,8 @@ struct DaysSceneView: View {
         let found = index.scene(sceneId)
         return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Button {
+                DaysBackButton(title: found.map { daysWeekday($0.1.day, tz: index.tz) } ?? "Days") {
                     dismiss()
-                } label: {
-                    Text(verbatim: "\u{2039} \(found.map { daysWeekday($0.1.day, tz: index.tz) } ?? "Days")")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(DaysUI.muted)
                 }
                 if let (scene, episode) = found {
                     header(scene)
@@ -34,6 +30,7 @@ struct DaysSceneView: View {
             .padding(.bottom, 26)
         }
         .background(DaysUI.bg.ignoresSafeArea())
+        .background(DaysSwipeBack())
         .navigationBarHidden(true)
     }
 
@@ -45,9 +42,16 @@ struct DaysSceneView: View {
             ? ("recording", DaysUI.red)
             : scene.safe ? ("safe", DaysUI.green) : ("uploading", DaysUI.amber)
         return VStack(alignment: .leading, spacing: 4) {
-            Text("Scene \(scene.number)")
-                .font(.system(size: 40, weight: .semibold))
-                .tracking(-1.2)
+            if scene.title != nil {
+                Text("SCENE \(scene.number)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(DaysUI.dim)
+            }
+            Text(scene.title ?? "Scene \(scene.number)")
+                .font(.system(size: scene.title == nil ? 40 : 30, weight: .semibold))
+                .tracking(-1)
+                .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 0) {
                 Text("\(range) \u{00B7} \(daysDuration(scene.durationMs(now: now))) \u{00B7} ")
                     .foregroundStyle(DaysUI.muted)

@@ -21,7 +21,11 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
     private var laneSessions: [URLSession?] = Array(repeating: nil, count: DaysBackgroundUploader.lanes)
     private var cleanupTask: Task<Void, Never>?
     var onDetachedComplete: (@Sendable (String) -> Void)?
-    private let chunkDir: URL = createAndGetDirectory(root: .cachesDirectory, name: "BackgroundChunks")
+    private let chunkDir: URL = {
+        let url = createAndGetDirectory(root: .cachesDirectory, name: "BackgroundChunks")
+        excludeFromBackup(url)
+        return url
+    }()
 
     private func identifier(_ lane: Int) -> String {
         "\(daysBackgroundIdentifier).\(lane)"

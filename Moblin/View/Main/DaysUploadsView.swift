@@ -57,6 +57,7 @@ struct DaysUploadsView: View {
             content
         }
         .background(DaysUI.bg.ignoresSafeArea())
+        .background(DaysSwipeBack())
         .navigationBarHidden(true)
     }
 
@@ -68,12 +69,8 @@ struct DaysUploadsView: View {
         let reason = daysUploadReason(drive: drive)
         return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Button {
+                DaysBackButton(title: "Days") {
                     dismiss()
-                } label: {
-                    Text(verbatim: "\u{2039} Days")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(DaysUI.muted)
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     if rows.isEmpty {
