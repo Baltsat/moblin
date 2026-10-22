@@ -340,6 +340,105 @@ struct DaysThumb: View {
     }
 }
 
+struct DaysScrubThumb: View {
+    let angle: DaysAngle
+    @State private var fraction: Double?
+    @State private var sheetReady = false
+    @State private var axisLocked = false
+
+    private func clock(_ seconds: Int) -> String {
+        seconds >= 3600
+            ? String(format: "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+            : String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private func open(at fraction: Double?) {
+        guard let id = angle.youtube else {
+            return
+        }
+        var text = "https://youtu.be/\(id)"
+        if let fraction, let sprite = angle.sprite {
+            text += "?t=\(sprite.seconds(at: fraction))"
+        }
+        if let url = URL(string: text) {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = max(geometry.size.width, 1)
+            ZStack {
+                DaysThumb(id: angle.thumbs.last, label: angle.label)
+                if let fraction, let sprite = angle.sprite, sheetReady,
+                   let frame = DaysSprites.shared.frame(sprite, index: sprite.index(at: fraction))
+                {
+                    Color.black
+                    Image(uiImage: frame)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: width, height: geometry.size.height)
+                        .clipped()
+                }
+                if let fraction, let sprite = angle.sprite {
+                    VStack(spacing: 0) {
+                        Spacer()
+                        HStack {
+                            Text(clock(sprite.seconds(at: fraction)))
+                                .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.black.opacity(0.55), in: Capsule())
+                            Spacer()
+                        }
+                        .padding(8)
+                        ZStack(alignment: .leading) {
+                            Rectangle().fill(Color.white.opacity(0.25))
+                            Rectangle().fill(.white).frame(width: width * fraction)
+                        }
+                        .frame(height: 2)
+                    }
+                    .foregroundStyle(.white)
+                }
+            }
+            .frame(width: width, height: geometry.size.height)
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 10)
+                    .onChanged { value in
+                        guard angle.sprite != nil else {
+                            return
+                        }
+                        if fraction == nil, abs(value.translation.height) > abs(value.translation.width) {
+                            return
+                        }
+                        fraction = min(max(value.location.x / width, 0), 1)
+                    }
+                    .onEnded { _ in
+                        fraction = nil
+                    }
+            )
+            .gesture(
+                SpatialTapGesture().onEnded { value in
+                    open(at: angle.sprite == nil ? nil : min(max(value.location.x / width, 0), 1))
+                }
+            )
+        }
+        .task(id: angle.sprite?.id) {
+            sheetReady = false
+            if let sprite = angle.sprite {
+                sheetReady = await DaysSprites.shared.sheet(sprite.id) != nil
+            }
+            #if DEBUG
+                let demo = UserDefaults.standard.double(forKey: "DaysScrubDemo")
+                if demo > 0, angle.sprite != nil {
+                    fraction = demo
+                }
+            #endif
+        }
+    }
+}
+
 struct DaysAngleLink<Content: View>: View {
     let youtube: String?
     @ViewBuilder let content: () -> Content
@@ -367,18 +466,23 @@ struct DaysSceneCard: View {
         let labels = present.map(\.label).joined(separator: " + ")
         return VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .bottomTrailing) {
-                DaysAngleLink(youtube: main?.youtube) {
-                    DaysThumb(id: main?.thumbs.last, label: main?.label ?? "Scene")
-                        .frame(height: 150)
-                        .frame(maxWidth: .infinity)
-                        .overlay(alignment: .bottomLeading) {
-                            Text(verbatim: "\(scene.number)")
-                                .font(.system(size: 34, weight: .bold))
-                                .foregroundStyle(.white.opacity(0.9))
-                                .shadow(color: .black.opacity(0.6), radius: 6, y: 2)
-                                .padding(.leading, 14)
-                                .padding(.bottom, 10)
-                        }
+                Group {
+                    if let main {
+                        DaysScrubThumb(angle: main)
+                    } else {
+                        DaysThumb(id: nil, label: "Scene")
+                    }
+                }
+                .frame(height: 150)
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .bottomLeading) {
+                    Text(verbatim: "\(scene.number)")
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .shadow(color: .black.opacity(0.6), radius: 6, y: 2)
+                        .padding(.leading, 14)
+                        .padding(.bottom, 10)
+                        .allowsHitTesting(false)
                 }
                 if let second {
                     DaysAngleLink(youtube: second.youtube) {

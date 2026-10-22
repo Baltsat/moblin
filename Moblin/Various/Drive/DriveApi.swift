@@ -212,9 +212,13 @@ final class DriveApi: Sendable {
     }
 
     func updateJson(fileId: String, content: Data) async throws {
+        try await updateMedia(fileId: fileId, content: content, mimeType: "application/json")
+    }
+
+    func updateMedia(fileId: String, content: Data, mimeType: String) async throws {
         var request = URLRequest(url: URL(string: "\(driveUploadUrl)/\(fileId)?uploadType=media")!)
         request.httpMethod = "PATCH"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
         let (response, data) = try await send(request, body: content)
         try check(response, data, ok: [200])
     }

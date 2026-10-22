@@ -82,12 +82,10 @@ struct DaysSceneView: View {
                     Spacer()
                     Text(detail(angle)).font(.system(size: 13)).foregroundStyle(Color(white: 0.7))
                 }
-                DaysAngleLink(youtube: angle.youtube) {
-                    DaysThumb(id: angle.thumbs.last, label: label)
-                        .frame(height: 190)
-                        .frame(maxWidth: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
+                DaysScrubThumb(angle: angle)
+                    .frame(height: 190)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
                 if angle.thumbs.count > 1 {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
