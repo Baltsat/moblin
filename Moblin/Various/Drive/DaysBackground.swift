@@ -135,6 +135,26 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
         task.resume()
     }
 
+    func detachedStates() async -> [(name: String, state: URLSessionTask.State, sent: Int64)] {
+        var out: [(name: String, state: URLSessionTask.State, sent: Int64)] = []
+        for session in allSessions() {
+            for task in await session.allTasks {
+                if let info = detachedInfo(task) {
+                    out.append((info.name, task.state, task.countOfBytesSent))
+                }
+            }
+        }
+        return out
+    }
+
+    func cancelDetached(name: String) async {
+        for session in allSessions() {
+            for task in await session.allTasks where (task.taskDescription ?? "").hasPrefix("\(daysDetachedPrefix)\(name)|") {
+                task.cancel()
+            }
+        }
+    }
+
     func hasDetached(name: String) async -> Bool {
         for session in allSessions() {
             let tasks = await session.allTasks

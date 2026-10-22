@@ -229,6 +229,7 @@ enum DriveInput: Sendable {
     case resume
     case background(Bool)
     case bgFinished(String)
+    case watchdog
 }
 
 private func makeStream<T: Sendable>(
@@ -251,6 +252,8 @@ private actor DriveEngine {
     private var folderTasks: [String: Task<String, Error>] = [:]
     private var inBackground = false
     private var lastStatus = ""
+    private var lastBgLog = Date.distantPast
+    private var bgProgress: [String: (sent: Int64, at: Date)] = [:]
     private var folderIds: [String: String] = [:]
     private var meters: [String: DriveMeter] = [:]
     private let wakeStream: AsyncStream<Void>
@@ -294,6 +297,8 @@ private actor DriveEngine {
             armed?.localPath = path
         case .resume:
             recover()
+            wake()
+        case .watchdog:
             wake()
         case let .background(value):
             inBackground = value
@@ -454,11 +459,40 @@ private actor DriveEngine {
     }
 
     private func reconcileBackground() async {
+        guard sessions.values.contains(where: { $0.manifest.bgActive }) else {
+            return
+        }
+        let states = await DaysBackgroundUploader.shared.detachedStates()
+        if Date().timeIntervalSince(lastBgLog) > 60 {
+            lastBgLog = Date()
+            daysLog("detached tasks \(states.map { "\($0.name.prefix(17)) state=\($0.state.rawValue) sent=\($0.sent)" })")
+        }
         for session in sessions.values where session.manifest.bgActive {
-            if !(await DaysBackgroundUploader.shared.hasDetached(name: session.manifest.name)) {
+            let name = session.manifest.name
+            let live = states.filter { $0.name == name && $0.state != .completed }
+            if live.isEmpty {
                 session.manifest.bgActive = false
                 session.needsResync = true
                 session.save()
+                bgProgress[name] = nil
+                continue
+            }
+            guard !inBackground else {
+                bgProgress[name] = nil
+                continue
+            }
+            let sent = live.map(\.sent).max() ?? 0
+            if let last = bgProgress[name], last.sent == sent {
+                if Date().timeIntervalSince(last.at) > 150 {
+                    daysLog("detached task stalled \(name) sent=\(sent), restarting in foreground")
+                    await DaysBackgroundUploader.shared.cancelDetached(name: name)
+                    session.manifest.bgActive = false
+                    session.needsResync = true
+                    session.save()
+                    bgProgress[name] = nil
+                }
+            } else {
+                bgProgress[name] = (sent, Date())
             }
         }
     }
@@ -1029,6 +1063,12 @@ final class DriveUploader: @unchecked Sendable {
         }
         DaysBackgroundUploader.shared.onDetachedComplete = { [continuation] name in
             continuation.yield(.bgFinished(name))
+        }
+        Task.detached {
+            while true {
+                try? await Task.sleep(for: .seconds(60))
+                continuation.yield(.watchdog)
+            }
         }
         NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification,
                                                object: nil,
