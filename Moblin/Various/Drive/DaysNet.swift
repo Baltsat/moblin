@@ -25,7 +25,7 @@ enum DaysPrefs {
     }
 
     static var dimSeconds: Int {
-        UserDefaults.standard.object(forKey: dimDelay) as? Int ?? 15
+        min(UserDefaults.standard.object(forKey: dimDelay) as? Int ?? 8, 10)
     }
 }
 

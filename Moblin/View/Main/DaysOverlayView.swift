@@ -560,7 +560,7 @@ struct DaysDimView: View {
     var body: some View {
         ZStack {
             if dim.dimmed {
-                Color.black.opacity(0.8)
+                Color.black
                     .ignoresSafeArea()
                 VStack {
                     HStack(alignment: .top) {
@@ -592,10 +592,11 @@ struct DaysDimView: View {
                     })
             }
         }
+        .statusBarHidden(dim.dimmed)
         .onChange(of: dim.dimmed) { dimmed in
             if dimmed {
                 model.disableScreenPreview()
-            } else if model.statusOther.thermalState.rawValue < ProcessInfo.ThermalState.serious.rawValue {
+            } else {
                 model.maybeEnableScreenPreview()
             }
         }

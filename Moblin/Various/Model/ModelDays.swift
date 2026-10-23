@@ -119,9 +119,9 @@ extension Model {
             daysThermalReduced = false
             media.setVideoStreamBitrate(bitrate: stream.bitrate)
         }
-        if hot {
+        if daysDim.dimmed {
             disableScreenPreview()
-        } else if !daysDim.dimmed {
+        } else {
             maybeEnableScreenPreview()
         }
         youTubeThermalChanged(state)
@@ -333,8 +333,12 @@ extension AVCaptureDevice {
         if isSmoothAutoFocusSupported {
             isSmoothAutoFocusEnabled = false
         }
-        automaticallyAdjustsFaceDrivenAutoFocusEnabled = true
-        automaticallyAdjustsFaceDrivenAutoExposureEnabled = true
+        if isFocusModeSupported(.continuousAutoFocus) {
+            automaticallyAdjustsFaceDrivenAutoFocusEnabled = true
+        }
+        if isExposureModeSupported(.continuousAutoExposure) {
+            automaticallyAdjustsFaceDrivenAutoExposureEnabled = true
+        }
         isSubjectAreaChangeMonitoringEnabled = true
     }
 }
