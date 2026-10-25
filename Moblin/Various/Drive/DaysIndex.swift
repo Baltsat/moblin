@@ -17,6 +17,8 @@ private let daysIndexThumbsKey = "daysIndexThumbs"
 private let daysIndexHistoryKey = "daysIndexPhoneHistory"
 private let daysThumbTriesKey = "daysIndexThumbTries2"
 private let daysIndexThumbFolderKey = "daysIndexThumbFolderId"
+private let daysPhoneTitlesKey = "daysPhoneTitles"
+private let daysTitleTriesKey = "daysTitleTries"
 private let daysStaleMs: Int64 = 180_000
 private let daysMergeGapMs: Int64 = 10000
 private let daysPremiere = (year: 2026, month: 10, day: 19)
@@ -174,6 +176,9 @@ struct DaysRawIndex {
             }
             return out
         }
+        if !titles.isEmpty {
+            root["titles"] = titles
+        }
         return try? JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])
     }
 }
@@ -304,6 +309,7 @@ final class DaysIndex: ObservableObject {
     private var thumbsMap: [String: [String]] = [:]
     private var seeded = false
     private var generating = false
+    private var titling = false
     private var pulls = 0
     private(set) var tz = TimeZone.current
 
@@ -509,6 +515,7 @@ final class DaysIndex: ObservableObject {
                              updatedMs: nowMs(),
                              live: live,
                              scenes: scenes)
+        phone.titles = UserDefaults.standard.dictionary(forKey: daysPhoneTitlesKey) as? [String: String] ?? [:]
         if let data = phone.encoded() {
             UserDefaults.standard.set(data, forKey: daysIndexHistoryKey)
         }
@@ -630,7 +637,7 @@ final class DaysIndex: ObservableObject {
                                         sessions: [scene.session]))
             }
         }
-        let titles = mac?.titles ?? [:]
+        let titles = phone.titles.merging(mac?.titles ?? [:]) { _, fromMac in fromMac }
         for index in merged.indices {
             merged[index].title = merged[index].sessions.compactMap { titles[$0] }.first { !$0.isEmpty }
         }
@@ -765,6 +772,58 @@ final class DaysIndex: ObservableObject {
             } catch DriveError.sessionGone {
                 UserDefaults.standard.removeObject(forKey: daysIndexMacFileKey)
             } catch {}
+            generateTitles()
+        }
+    }
+
+    private func generateTitles() {
+        guard !fixtures, !titling, DaysTitleSecrets.shared != nil else {
+            return
+        }
+        let now = nowMs()
+        let macFresh = mac.map { now - $0.updatedMs < daysStaleMs } ?? false
+        let phoneSessions = Set(phone.scenes.map(\.session))
+        let scenes = seasons.flatMap(\.episodes).flatMap(\.scenes).sorted { $0.startMs < $1.startMs }
+        var tries = UserDefaults.standard.dictionary(forKey: daysTitleTriesKey) as? [String: Int] ?? [:]
+        let candidate = scenes.reversed().first { scene in
+            guard let end = scene.endMs, scene.title == nil, end - scene.startMs >= 60000,
+                  scene.sessions.contains(where: { phoneSessions.contains($0) }),
+                  (tries[scene.id] ?? 0) < 3
+            else {
+                return false
+            }
+            return !macFresh || now - end > 15 * 60000
+        }
+        guard let candidate, let end = candidate.endMs else {
+            return
+        }
+        let sprite = candidate.angles.first { $0.angle == "phone" }?.sprite
+        let prev = Array(scenes.filter { $0.startMs < candidate.startMs }.compactMap(\.title).suffix(6))
+        titling = true
+        tries[candidate.id] = (tries[candidate.id] ?? 0) + 1
+        UserDefaults.standard.set(tries, forKey: daysTitleTriesKey)
+        Task {
+            defer { titling = false }
+            var jpeg: Data?
+            if let id = sprite?.id {
+                _ = await DaysSprites.shared.sheet(id)
+                jpeg = DaysSprites.shared.cacheDirectory.flatMap { try? Data(contentsOf: $0.appendingPathComponent("\(id).jpg")) }
+            }
+            do {
+                let title = try await daysAskTitle(startMs: candidate.startMs, endMs: end, tz: tz, prev: prev, sprite: jpeg)
+                var stored = UserDefaults.standard.dictionary(forKey: daysPhoneTitlesKey) as? [String: String] ?? [:]
+                for session in candidate.sessions {
+                    stored[session] = title
+                }
+                UserDefaults.standard.set(stored, forKey: daysPhoneTitlesKey)
+                daysLog("title \(candidate.id) \(title)")
+                rebuildPhone()
+                push()
+                try? await Task.sleep(for: .seconds(2))
+                generateTitles()
+            } catch {
+                daysLog("title failed \(candidate.id) \(error)")
+            }
         }
     }
 

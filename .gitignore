@@ -111,3 +111,6 @@ tests/ltc.wav
 tests/*.moblinSettings
 tests/cache/
 Moblin Localizations/
+
+# Days: local API key, never committed
+days-secrets.json
