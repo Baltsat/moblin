@@ -67,3 +67,22 @@ func daysReadRange(_ file: URL, offset: Int64, count: Int) throws -> Data {
     try handle.seek(toOffset: UInt64(offset))
     return try handle.read(upToCount: count) ?? Data()
 }
+
+func daysCopyRange(_ source: URL, start: Int64, end: Int64, out: URL) throws {
+    let manager = FileManager.default
+    try? manager.removeItem(at: out)
+    manager.createFile(atPath: out.path, contents: nil, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+    let input = try FileHandle(forReadingFrom: source)
+    let output = try FileHandle(forWritingTo: out)
+    defer {
+        try? input.close()
+        try? output.close()
+    }
+    try input.seek(toOffset: UInt64(start))
+    var left = end - start
+    while left > 0, let block = try input.read(upToCount: Int(min(left, 8 * 1024 * 1024))), !block.isEmpty {
+        try output.write(contentsOf: block)
+        left -= Int64(block.count)
+    }
+    try output.synchronize()
+}

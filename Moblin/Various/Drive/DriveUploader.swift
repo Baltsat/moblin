@@ -151,6 +151,12 @@ private struct DriveManifest: Codable {
     var remReadyStored: Bool?
     var bgActiveStored: Bool?
     var lane: Int?
+    var fromFileStored: Bool?
+
+    var fromFile: Bool {
+        get { fromFileStored ?? false }
+        set { fromFileStored = newValue }
+    }
 
     var remReady: Bool {
         get { remReadyStored ?? false }
@@ -229,6 +235,7 @@ enum DriveInput: Sendable {
     case resume
     case background(Bool)
     case bgFinished(String)
+    case requeue(name: String, startMs: Int64, path: String)
     case watchdog
 }
 
@@ -303,6 +310,9 @@ private actor DriveEngine {
         case let .background(value):
             inBackground = value
             recover()
+            wake()
+        case let .requeue(name, startMs, path):
+            requeue(name: name, startMs: startMs, path: path)
             wake()
         case let .bgFinished(name):
             recover()
@@ -425,6 +435,56 @@ private actor DriveEngine {
         session.save()
     }
 
+    private func localFile(_ manifest: DriveManifest) -> (url: URL, size: Int64)? {
+        guard let path = manifest.info.localPath,
+              let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size]) as? Int64, size > 0
+        else {
+            return nil
+        }
+        return (URL(fileURLWithPath: path), size)
+    }
+
+    private func restartFromFile(_ session: DriveSession) -> Bool {
+        guard session.manifest.closed, let local = localFile(session.manifest) else {
+            return false
+        }
+        try? FileManager.default.removeItem(at: remainderUrl(session))
+        session.manifest.fromFile = true
+        session.manifest.bytesTotal = local.size
+        session.manifest.uploadUrl = nil
+        session.manifest.acked = 0
+        session.manifest.remStart = nil
+        session.manifest.remEnd = nil
+        session.manifest.remReady = false
+        session.manifest.bgActive = false
+        session.manifest.failed = false
+        session.needsResync = false
+        session.save()
+        daysLog("restart from local file \(session.manifest.name) \(local.size)")
+        return true
+    }
+
+    private func requeue(name: String, startMs: Int64, path: String) {
+        let dir = root.appending(component: name)
+        guard sessions[name] == nil, !FileManager.default.fileExists(atPath: dir.path),
+              let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size]) as? Int64, size > 0
+        else {
+            return
+        }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var manifest = DriveManifest(name: name, startMs: startMs, info: DriveSessionInfo(
+            device: "iPhone", codec: "h264", width: 1920, height: 1080, fps: 30, bitrateKbps: 12000, localPath: path
+        ))
+        manifest.closed = true
+        manifest.bytesTotal = size
+        manifest.fromFile = true
+        let session = DriveSession(manifest: manifest, dir: dir)
+        session.save()
+        sessions[name] = session
+        daysLog("requeued \(name) from \(path) \(size)")
+        logger.info("drive: Re-queued \(name) from the local recording")
+    }
+
     private func recover() {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         for name in names.sorted() where sessions[name] == nil {
@@ -444,9 +504,12 @@ private actor DriveEngine {
                 continue
             }
             let session = DriveSession(manifest: manifest, dir: dir)
+            if manifest.failed {
+                _ = restartFromFile(session)
+            }
             session.tailIndex = session.committedParts()
             session.needsResync = true
-            if !manifest.closed {
+            if !manifest.closed, !manifest.fromFile {
                 let tailSize = session.tailSize(session.tailIndex)
                 session.manifest.closed = true
                 session.manifest.endMs = nowMs()
@@ -564,6 +627,9 @@ private actor DriveEngine {
             } catch DriveError.fatal(let message) {
                 daysLog("fatal \(message)")
                 logger.info("drive: Fatal: \(message)")
+                if !session.manifest.fromFile, restartFromFile(session) {
+                    continue loop
+                }
                 session.manifest.failed = true
                 session.save()
                 setStatus("Google Drive: failed, \(message)")
@@ -579,13 +645,12 @@ private actor DriveEngine {
                     session.save()
                     continue loop
                 }
+                if restartFromFile(session) {
+                    continue loop
+                }
                 session.manifest.failed = true
                 session.save()
-                if session.manifest.closed, session.manifest.info.localPath != nil {
-                    try? FileManager.default.removeItem(at: session.dir)
-                    sessions[name] = nil
-                }
-                setStatus("Google Drive: upload session lost, kept the local recording")
+                setStatus("Google Drive: upload session lost, local recording missing")
                 restart = true
                 break
             } catch {
@@ -619,6 +684,14 @@ private actor DriveEngine {
             let folder = try await ensureFolder(name: session.manifest.name)
             session.manifest.folderId = folder
             daysQueueUpdate(session.manifest.name, startMs: session.manifest.startMs) { $0.driveFolderId = folder }
+            if session.manifest.fromFile, let existing = try await api.findFile(name: "\(session.manifest.name).mp4", folderId: folder) {
+                daysLog("already on Drive \(session.manifest.name) \(existing)")
+                session.manifest.videoFileId = existing
+                session.manifest.acked = session.manifest.bytesTotal
+                session.save()
+                try await finish(session)
+                return true
+            }
             session.manifest.uploadUrl = try await api.startResumable(
                 name: "\(session.manifest.name).mp4",
                 folderId: folder,
@@ -650,6 +723,9 @@ private actor DriveEngine {
         }
         if session.manifest.remStart != nil {
             return try await stepRemainder(session, uploadUrl: uploadUrl, lane: lane)
+        }
+        if session.manifest.fromFile {
+            return try await stepFile(session, uploadUrl: uploadUrl, lane: lane)
         }
         if inBackground, session.manifest.closed, !DaysPace.live, try await startBackground(session, uploadUrl: uploadUrl, lane: lane) {
             return false
@@ -741,8 +817,48 @@ private actor DriveEngine {
         return try await startDetached(session, uploadUrl: uploadUrl, lane: lane)
     }
 
+    private func stepFile(_ session: DriveSession, uploadUrl: String, lane: Int) async throws -> Bool {
+        guard let local = localFile(session.manifest) else {
+            session.manifest.failed = true
+            session.save()
+            setStatus("Google Drive: local recording missing")
+            return false
+        }
+        let total = session.manifest.bytesTotal
+        let acked = session.manifest.acked
+        if inBackground, !DaysPace.live {
+            session.manifest.remStart = acked
+            session.manifest.remEnd = min(acked + driveGroupBytes, total)
+            session.manifest.remReady = false
+            session.save()
+            try assemble(session)
+            return try await startDetached(session, uploadUrl: uploadUrl, lane: lane)
+        }
+        let count = Int(min(Int64(driveChunkParts * drivePartSize), total - acked))
+        let chunk = try daysReadRange(local.url, offset: acked, count: count)
+        session.needsResync = true
+        daysLog("put file chunk \(chunk.count) at \(acked)/\(total)")
+        let result = try await api.putChunk(
+            uploadUrl: uploadUrl,
+            data: chunk,
+            offset: acked,
+            total: acked + Int64(chunk.count) >= total ? total : nil,
+            lane: lane,
+            progress: progress(for: session)
+        )
+        session.needsResync = false
+        _ = try await apply(result, to: session)
+        return true
+    }
+
     private func assemble(_ session: DriveSession) throws {
         guard let start = session.manifest.remStart, let end = session.manifest.remEnd else {
+            return
+        }
+        if session.manifest.fromFile, let local = localFile(session.manifest) {
+            try daysCopyRange(local.url, start: start, end: end, out: remainderUrl(session))
+            session.manifest.remReady = true
+            session.save()
             return
         }
         try daysAssembleRemainder(
@@ -1117,6 +1233,10 @@ final class DriveUploader: @unchecked Sendable {
 
     func resume() {
         inputs.yield(.resume)
+    }
+
+    func requeue(name: String, startMs: Int64, path: String) {
+        inputs.yield(.requeue(name: name, startMs: startMs, path: path))
     }
 }
 

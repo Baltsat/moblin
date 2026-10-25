@@ -272,6 +272,7 @@ struct DaysVerdict {
 
 @MainActor
 final class DaysIndex: ObservableObject {
+    private var requeued = Set<String>()
     static let shared = DaysIndex()
 
     @Published private(set) var mac: DaysRawIndex?
@@ -512,6 +513,26 @@ final class DaysIndex: ObservableObject {
             UserDefaults.standard.set(data, forKey: daysIndexHistoryKey)
         }
         rebuild()
+        requeueMissing()
+    }
+
+    private func requeueMissing() {
+        guard !fixtures, driveAuth.isSignedIn else {
+            return
+        }
+        let files = localRecordings()
+        for scene in phone.scenes where scene.endMs != nil && scene.session != phone.live?.session && !requeued.contains(scene.session) {
+            guard let angle = scene.angles.first(where: { $0.angle == "phone" }), angle.driveId == nil, angle.bytes > 0,
+                  let url = localFile(for: scene, in: files),
+                  let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date,
+                  Date().timeIntervalSince(modified) > 120
+            else {
+                continue
+            }
+            requeued.insert(scene.session)
+            daysLog("index requeue \(scene.session) \(url.lastPathComponent)")
+            driveUploader.requeue(name: scene.session, startMs: scene.startMs, path: url.path)
+        }
     }
 
     private func storedHistory() -> DaysRawIndex {
