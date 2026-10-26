@@ -165,6 +165,27 @@ struct DaysStatusPill: View {
     }
 }
 
+private struct DaysQualityChip: View {
+    let model: Model
+    @ObservedObject private var quality = DaysQuality.shared
+
+    var body: some View {
+        Button {
+            model.cycleQuality()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } label: {
+            Text(quality.label)
+                .font(.system(size: 13, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .frame(height: 44)
+                .daysGlass()
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct DaysRoundButton: View {
     let systemName: String
     var size: CGFloat = 44
@@ -376,6 +397,9 @@ struct DaysOverlayView: View {
 
     private var pair: some View {
         HStack(spacing: 10) {
+            if !rec {
+                DaysQualityChip(model: model)
+            }
             DaysRoundButton(systemName: "film.stack", size: rec ? 40 : 44) {
                 showHome = true
             }

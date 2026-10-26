@@ -42,7 +42,8 @@ extension Model {
             return
         }
         DaysPreset.pending = false
-        daysApplyPreset(DaysPreset.current)
+        DaysQuality.shared.applied = nil
+        daysAutoPreset()
     }
 
     func daysApplyPreset(_ preset: DaysPreset, reload: Bool = true) {
@@ -91,8 +92,13 @@ extension Model {
         if isRecording || isLive {
             DaysPreset.pending = true
         } else {
-            daysApplyPreset(preset)
+            DaysQuality.shared.applied = nil
+            daysAutoPreset()
         }
+    }
+
+    func cycleQuality() {
+        choosePreset(DaysPreset.current.next)
     }
 
     func daysFlipCamera() {
@@ -110,21 +116,32 @@ extension Model {
         storeSettings()
     }
 
-    /// user-req: record at the camera's limit; step down to 1080p HEVC only when hot or the phone is running out of space.
+    /// user-req: one button, best quality the hardware can hold without dropped frames. Auto decides before each take,
+    /// never mid-take: 4K30 HEVC while cool, 1080p60 when warm, 1080p30 when hot or short on space.
     func daysAutoPreset() {
-        guard !isRecording, DaysPreset.current == .max || daysAutoReduced else {
+        guard !isRecording else {
             return
         }
-        let hot = statusOther.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
-        let free = (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
-            .volumeAvailableCapacityForImportantUsage ?? Int64.max
-        let reduce = hot || free < 60_000_000_000
-        guard reduce != daysAutoReduced else {
+        let chosen = DaysPreset.current
+        var target = chosen
+        if chosen == .auto {
+            let heat = statusOther.thermalState
+            let free = (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
+                .volumeAvailableCapacityForImportantUsage ?? Int64.max
+            if heat.rawValue >= ProcessInfo.ThermalState.serious.rawValue || free < 60_000_000_000 {
+                target = .allDay
+            } else if heat == .fair || free < 120_000_000_000 {
+                target = .smooth
+            } else {
+                target = .max
+            }
+        }
+        guard DaysQuality.shared.applied != target else {
             return
         }
-        daysAutoReduced = reduce
-        daysLog("auto quality \(reduce ? "1080p (hot \(hot), free \(free / 1_000_000_000) GB)" : "4K max")")
-        daysApplyPreset(reduce ? .allDay : .max)
+        DaysQuality.shared.applied = target
+        daysLog("quality \(chosen.rawValue) -> \(target.short)")
+        daysApplyPreset(target)
     }
 
     func daysThermalChanged() {
@@ -148,10 +165,23 @@ extension Model {
 }
 
 @MainActor private var daysThermalReduced = false
-@MainActor private var daysAutoReduced = false
+
+@MainActor
+final class DaysQuality: ObservableObject {
+    static let shared = DaysQuality()
+    @Published var chosen = DaysPreset.current
+    @Published var applied: DaysPreset?
+
+    var label: String {
+        guard let applied else {
+            return chosen.short
+        }
+        return chosen == .auto ? "Auto · \(applied.short)" : applied.short
+    }
+}
 
 enum DaysPreset: String, CaseIterable {
-    case allDay, smooth, max
+    case auto, allDay, smooth, max
 
     struct Values {
         let resolution: SettingsStreamResolution
@@ -163,12 +193,12 @@ enum DaysPreset: String, CaseIterable {
 
     var values: Values {
         switch self {
-        case .allDay:
+        case .auto, .allDay:
             Values(resolution: .r1920x1080, fps: 30, streamBitrate: 4_000_000,
                    recordingCodec: .h265hevc, recordingBitrate: 10_000_000)
         case .smooth:
             Values(resolution: .r1920x1080, fps: 60, streamBitrate: 12_000_000,
-                   recordingCodec: .h264avc, recordingBitrate: 14_000_000)
+                   recordingCodec: .h265hevc, recordingBitrate: 16_000_000)
         case .max:
             Values(resolution: .r3840x2160, fps: 30, streamBitrate: 12_000_000,
                    recordingCodec: .h265hevc, recordingBitrate: 35_000_000)
@@ -177,21 +207,38 @@ enum DaysPreset: String, CaseIterable {
 
     var title: LocalizedStringKey {
         switch self {
+        case .auto: "Auto"
         case .allDay: "All-day"
         case .smooth: "Smooth"
         case .max: "Max quality"
         }
     }
 
+    var short: String {
+        switch self {
+        case .auto: "Auto"
+        case .allDay: "1080p30"
+        case .smooth: "1080p60"
+        case .max: "4K30"
+        }
+    }
+
+    var next: DaysPreset {
+        let all = DaysPreset.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
+    }
+
     private static let key = "daysPreset"
     private static let pendingKey = "daysPresetPending"
 
     static var current: DaysPreset {
-        DaysPreset(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .allDay
+        DaysPreset(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .auto
     }
 
+    @MainActor
     static func set(_ preset: DaysPreset) {
         UserDefaults.standard.set(preset.rawValue, forKey: key)
+        DaysQuality.shared.chosen = preset
     }
 
     static var pending: Bool {
@@ -289,13 +336,12 @@ extension Model {
             UserDefaults.standard.set(false, forKey: DaysPrefs.githubArchive)
             UserDefaults.standard.set(true, forKey: "daysGitHubOffMigration1")
         }
-        let key = "daysBitrateMigration13"
+        let key = "daysBitrateMigration14"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return
         }
-        DaysPreset.set(.allDay)
+        DaysPreset.set(.auto)
         UserDefaults.standard.set(false, forKey: "daysYouTubeEnabled")
-        daysApplyPreset(DaysPreset.current, reload: false)
         storeSettings()
         UserDefaults.standard.set(true, forKey: key)
     }
