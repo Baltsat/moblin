@@ -1,5 +1,6 @@
 import BackgroundTasks
 import Foundation
+import UIKit
 
 private let daysSyncIdentifier = "com.baltsat.moblin-dais.sync"
 
@@ -24,6 +25,7 @@ enum DaysBackgroundSync {
 
     private static func handle(_ task: BGProcessingTask) {
         daysLog("BGProcessingTask started")
+        DispatchQueue.main.async { daysLogBackgroundSettings() }
         schedule()
         nonisolated(unsafe) let task = task
         let work = Task {
@@ -38,4 +40,22 @@ enum DaysBackgroundSync {
             task.setTaskCompleted(success: false)
         }
     }
+}
+
+@MainActor
+func daysLogBackgroundSettings() {
+    let refresh = switch UIApplication.shared.backgroundRefreshStatus {
+    case .available: "on"
+    case .denied: "OFF"
+    case .restricted: "restricted"
+    @unknown default: "unknown"
+    }
+    UIDevice.current.isBatteryMonitoringEnabled = true
+    let battery = switch UIDevice.current.batteryState {
+    case .charging: "charging"
+    case .full: "full"
+    case .unplugged: "unplugged"
+    default: "unknown"
+    }
+    daysLog("settings backgroundRefresh=\(refresh) lowPower=\(ProcessInfo.processInfo.isLowPowerModeEnabled) battery=\(battery) \(Int(UIDevice.current.batteryLevel * 100))%")
 }

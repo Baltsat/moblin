@@ -336,6 +336,7 @@ final class DaysIndex: ObservableObject {
             return
         }
         daysLog("build titles-shorts-nav season1=2026-10-19")
+        daysLogBackgroundSettings()
         self.model = model
         #if DEBUG
             if UserDefaults.standard.bool(forKey: "DaysPortrait") {
