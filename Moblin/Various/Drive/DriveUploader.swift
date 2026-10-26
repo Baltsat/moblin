@@ -411,7 +411,7 @@ private actor DriveEngine {
     private func handToGitHub(_ session: DriveSession) {
         guard githubAuth.isSignedIn, DaysPrefs.isGitHubArchive,
               session.manifest.githubHanded != true,
-              let localPath = session.manifest.info.localPath,
+              let localPath = session.manifest.info.localPath.map(daysCurrentPath),
               let sidecar = try? sidecarData(session)
         else {
             return
@@ -436,7 +436,7 @@ private actor DriveEngine {
     }
 
     private func localFile(_ manifest: DriveManifest) -> (url: URL, size: Int64)? {
-        guard let path = manifest.info.localPath,
+        guard let path = manifest.info.localPath.map(daysCurrentPath),
               let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size]) as? Int64, size > 0
         else {
             return nil
@@ -990,7 +990,7 @@ private actor DriveEngine {
         }
         if session.manifest.githubHanded == true, DaysPrefs.isGitHubArchive {
             logger.info("drive: GitHub archive already running for \(session.manifest.name)")
-        } else if let localPath = session.manifest.info.localPath {
+        } else if let localPath = session.manifest.info.localPath.map(daysCurrentPath) {
             if githubAuth.isSignedIn, DaysPrefs.isGitHubArchive,
                let sidecar = try? sidecarData(session),
                await githubArchive.enqueue(tag: session.manifest.name, localPath: localPath, sidecar: sidecar)
@@ -1241,3 +1241,11 @@ final class DriveUploader: @unchecked Sendable {
 }
 
 let driveUploader = DriveUploader()
+
+func daysCurrentPath(_ path: String) -> String {
+    guard !FileManager.default.fileExists(atPath: path), let range = path.range(of: "/Documents/") else {
+        return path
+    }
+    let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    return documents.appendingPathComponent(String(path[range.upperBound...])).path
+}

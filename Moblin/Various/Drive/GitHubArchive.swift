@@ -245,7 +245,7 @@ private actor GitHubEngine {
         }
         try await writeIndex(tag: tag, items: allItems)
         try? FileManager.default.removeItem(at: sidecarUrl(tag))
-        if let path = job.localPath {
+        if let path = job.localPath.map(daysCurrentPath) {
             try? FileManager.default.removeItem(atPath: path)
         }
         jobs.removeAll { $0.tag == tag }
@@ -331,7 +331,7 @@ private actor GitHubEngine {
             result.append(GitHubItem(name: "\(job.tag).json", contentType: "application/json",
                                      url: sidecar, offset: 0, length: size, temporary: false))
         }
-        guard let path = job.localPath, let size = fileSize(URL(fileURLWithPath: path)) else {
+        guard let path = job.localPath.map(daysCurrentPath), let size = fileSize(URL(fileURLWithPath: path)) else {
             return result
         }
         let url = URL(fileURLWithPath: path)
