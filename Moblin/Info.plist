@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.baltsat.moblin-dais.sync</string>
+	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -15,6 +19,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleName</key>
+	<string>Days</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -30,12 +36,14 @@
 			</array>
 		</dict>
 	</array>
+	<key>DriveClientId</key>
+	<string>$(DRIVE_CLIENT_ID)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>elgato-device-driver</string>
 	</array>
-	<key>DriveClientId</key>
-	<string>$(DRIVE_CLIENT_ID)</string>
 	<key>MoblinWebsiteApiUrl</key>
 	<string>$(MOBLIN_WEBSITE_API_URL)</string>
 	<key>NSAppTransportSecurity</key>
@@ -80,10 +88,6 @@
 		<string>voip</string>
 		<string>processing</string>
 		<string>fetch</string>
-	</array>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>com.baltsat.moblin-dais.sync</string>
 	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
