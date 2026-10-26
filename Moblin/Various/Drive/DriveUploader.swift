@@ -879,12 +879,11 @@ private actor DriveEngine {
     }
 
     private func startDetached(_ session: DriveSession, uploadUrl: String, lane: Int) async throws -> Bool {
-        guard let start = session.manifest.remStart, let end = session.manifest.remEnd,
+        guard let start = session.manifest.remStart, var end = session.manifest.remEnd,
               let url = URL(string: uploadUrl)
         else {
             return false
         }
-        var end = end
         let acked = session.manifest.acked
         if acked > start {
             if session.manifest.fromFile, end - acked > driveGroupBytes, let local = localFile(session.manifest) {
