@@ -315,8 +315,12 @@ final class DaysIndex: ObservableObject {
     private var pulls = 0
     private(set) var tz = TimeZone.current
 
+    var totalLeft: Int64 {
+        seasons.flatMap(\.episodes).reduce(0) { $0 + $1.leftBytes }
+    }
+
     var leftEta: String? {
-        let left = today.leftBytes
+        let left = totalLeft
         guard left > 0, rate > 1000 else {
             return nil
         }
@@ -723,7 +727,7 @@ final class DaysIndex: ObservableObject {
         if let current = result.first?.episodes.first {
             today = current
         }
-        trackRate(left: today.leftBytes)
+        trackRate(left: totalLeft)
     }
 
     private func trackRate(left: Int64) {
@@ -745,7 +749,7 @@ final class DaysIndex: ObservableObject {
         if episode.id == today.id, recordingNow {
             return DaysVerdict(text: "\u{25CF} Recording", tone: .red)
         }
-        let left = episode.leftBytes
+        let left = episode.id == today.id ? totalLeft : episode.leftBytes
         if left > 0 {
             var text = "\u{2191} \(daysSize(left)) left"
             if episode.id == today.id, let eta = leftEta {
