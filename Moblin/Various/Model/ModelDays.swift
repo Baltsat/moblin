@@ -34,6 +34,7 @@ extension Model {
         daysObserveSubjectArea()
         daysPickStereoMic()
         applyDaysPendingPreset()
+        daysAutoPreset()
     }
 
     func applyDaysPendingPreset() {
@@ -59,7 +60,7 @@ extension Model {
             stream.recording.videoCodec = values.recordingCodec
             stream.recording.videoBitrate = values.recordingBitrate
             stream.recording.maxKeyFrameInterval = 2
-            stream.recording.audioBitrate = 192_000
+            stream.recording.audioBitrate = 256_000
         }
         database.videoStabilizationMode = .standard
         database.audio.preferStereoMic = true
@@ -109,6 +110,23 @@ extension Model {
         storeSettings()
     }
 
+    /// user-req: record at the camera's limit; step down to 1080p HEVC only when hot or the phone is running out of space.
+    func daysAutoPreset() {
+        guard !isRecording, DaysPreset.current == .max || daysAutoReduced else {
+            return
+        }
+        let hot = statusOther.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
+        let free = (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
+            .volumeAvailableCapacityForImportantUsage ?? Int64.max
+        let reduce = hot || free < 60_000_000_000
+        guard reduce != daysAutoReduced else {
+            return
+        }
+        daysAutoReduced = reduce
+        daysLog("auto quality \(reduce ? "1080p (hot \(hot), free \(free / 1_000_000_000) GB)" : "4K max")")
+        daysApplyPreset(reduce ? .allDay : .max)
+    }
+
     func daysThermalChanged() {
         let state = statusOther.thermalState
         let hot = state.rawValue >= ProcessInfo.ThermalState.serious.rawValue
@@ -125,10 +143,12 @@ extension Model {
             maybeEnableScreenPreview()
         }
         youTubeThermalChanged(state)
+        daysAutoPreset()
     }
 }
 
 @MainActor private var daysThermalReduced = false
+@MainActor private var daysAutoReduced = false
 
 enum DaysPreset: String, CaseIterable {
     case allDay, smooth, max
@@ -151,7 +171,7 @@ enum DaysPreset: String, CaseIterable {
                    recordingCodec: .h264avc, recordingBitrate: 14_000_000)
         case .max:
             Values(resolution: .r3840x2160, fps: 30, streamBitrate: 12_000_000,
-                   recordingCodec: .h265hevc, recordingBitrate: 30_000_000)
+                   recordingCodec: .h265hevc, recordingBitrate: 35_000_000)
         }
     }
 
@@ -167,7 +187,7 @@ enum DaysPreset: String, CaseIterable {
     private static let pendingKey = "daysPresetPending"
 
     static var current: DaysPreset {
-        DaysPreset(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .allDay
+        DaysPreset(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .max
     }
 
     static func set(_ preset: DaysPreset) {
@@ -269,10 +289,12 @@ extension Model {
             UserDefaults.standard.set(false, forKey: DaysPrefs.githubArchive)
             UserDefaults.standard.set(true, forKey: "daysGitHubOffMigration1")
         }
-        let key = "daysBitrateMigration11"
+        let key = "daysBitrateMigration12"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return
         }
+        DaysPreset.set(.max)
+        UserDefaults.standard.set(false, forKey: "daysYouTubeEnabled")
         daysApplyPreset(DaysPreset.current, reload: false)
         storeSettings()
         UserDefaults.standard.set(true, forKey: key)

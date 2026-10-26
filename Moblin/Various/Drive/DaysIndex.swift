@@ -409,6 +409,9 @@ final class DaysIndex: ObservableObject {
             return
         }
         wasRecording = value
+        if !value {
+            model?.daysAutoPreset()
+        }
         let now = nowMs()
         thumbTimer?.invalidate()
         thumbTimer = nil
