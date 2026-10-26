@@ -165,7 +165,7 @@ enum DaysPreset: String, CaseIterable {
         switch self {
         case .allDay:
             Values(resolution: .r1920x1080, fps: 30, streamBitrate: 4_000_000,
-                   recordingCodec: .h265hevc, recordingBitrate: 8_000_000)
+                   recordingCodec: .h265hevc, recordingBitrate: 10_000_000)
         case .smooth:
             Values(resolution: .r1920x1080, fps: 60, streamBitrate: 12_000_000,
                    recordingCodec: .h264avc, recordingBitrate: 14_000_000)
@@ -187,7 +187,7 @@ enum DaysPreset: String, CaseIterable {
     private static let pendingKey = "daysPresetPending"
 
     static var current: DaysPreset {
-        DaysPreset(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .max
+        DaysPreset(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .allDay
     }
 
     static func set(_ preset: DaysPreset) {
@@ -289,11 +289,11 @@ extension Model {
             UserDefaults.standard.set(false, forKey: DaysPrefs.githubArchive)
             UserDefaults.standard.set(true, forKey: "daysGitHubOffMigration1")
         }
-        let key = "daysBitrateMigration12"
+        let key = "daysBitrateMigration13"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return
         }
-        DaysPreset.set(.max)
+        DaysPreset.set(.allDay)
         UserDefaults.standard.set(false, forKey: "daysYouTubeEnabled")
         daysApplyPreset(DaysPreset.current, reload: false)
         storeSettings()

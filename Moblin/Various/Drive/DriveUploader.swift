@@ -824,6 +824,7 @@ private actor DriveEngine {
             setStatus("Google Drive: local recording missing")
             return false
         }
+        await DaysPace.pauseWhileLive()
         let total = session.manifest.bytesTotal
         let acked = session.manifest.acked
         if inBackground, !DaysPace.live {

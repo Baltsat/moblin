@@ -409,6 +409,7 @@ final class DaysIndex: ObservableObject {
             return
         }
         wasRecording = value
+        DaysPace.setLive(value)
         if !value {
             model?.daysAutoPreset()
         }
@@ -913,6 +914,9 @@ final class DaysIndex: ObservableObject {
     }
 
     private func resolveDurations() {
+        guard !(model?.isRecording ?? false) else {
+            return
+        }
         guard !fixtures, !resolving, driveAuth.isSignedIn else {
             return
         }
@@ -955,6 +959,9 @@ final class DaysIndex: ObservableObject {
     }
 
     private func generatePhoneThumbs() {
+        guard !(model?.isRecording ?? false) else {
+            return
+        }
         guard !fixtures, !generating, driveAuth.isSignedIn else {
             return
         }
@@ -1127,6 +1134,9 @@ final class DaysIndex: ObservableObject {
     }
 
     private func generatePhoneSprite() {
+        guard !(model?.isRecording ?? false) else {
+            return
+        }
         guard !fixtures, !spriteBusy, driveAuth.isSignedIn else {
             return
         }
