@@ -6,14 +6,19 @@ final class DaysPace: @unchecked Sendable {
     static let bytesPerSecond = 250_000.0
 
     private let lock = NSLock()
-    private var liveValue = false
+    private var streaming = false
+    private var recording = false
 
     static var live: Bool {
-        shared.lock.withLock { shared.liveValue }
+        shared.lock.withLock { shared.streaming || shared.recording }
     }
 
-    static func setLive(_ value: Bool) {
-        shared.lock.withLock { shared.liveValue = value }
+    static func setStreaming(_ value: Bool) {
+        shared.lock.withLock { shared.streaming = value }
+    }
+
+    static func setRecording(_ value: Bool) {
+        shared.lock.withLock { shared.recording = value }
     }
 
     static func sleep(seconds: Double) async {

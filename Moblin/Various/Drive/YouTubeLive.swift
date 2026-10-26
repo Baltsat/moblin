@@ -237,7 +237,7 @@ private var youTubeTask: Task<Void, Never>?
 @MainActor
 private var youTubeStreaming = false {
     didSet {
-        DaysPace.setLive(youTubeStreaming || isRecording)
+        DaysPace.setStreaming(youTubeStreaming)
     }
 }
 @MainActor

@@ -409,7 +409,7 @@ final class DaysIndex: ObservableObject {
             return
         }
         wasRecording = value
-        DaysPace.setLive(value)
+        DaysPace.setRecording(value)
         if !value {
             model?.daysAutoPreset()
         }
