@@ -19,6 +19,7 @@ private let daysThumbTriesKey = "daysIndexThumbTries2"
 private let daysIndexThumbFolderKey = "daysIndexThumbFolderId"
 private let daysPhoneTitlesKey = "daysPhoneTitles"
 private let daysTitleTriesKey = "daysTitleTries"
+private let daysFoundOnDriveKey = "daysFoundOnDrive"
 private let daysStaleMs: Int64 = 180_000
 private let daysMergeGapMs: Int64 = 10000
 private let daysPremiere = (year: 2026, month: 10, day: 19)
@@ -278,6 +279,7 @@ struct DaysVerdict {
 @MainActor
 final class DaysIndex: ObservableObject {
     private var requeued = Set<String>()
+    private var probed = Set<String>()
     static let shared = DaysIndex()
 
     @Published private(set) var mac: DaysRawIndex?
@@ -502,7 +504,14 @@ final class DaysIndex: ObservableObject {
             scenes.append(old)
         }
         scenes.sort { $0.startMs < $1.startMs }
+        let found = UserDefaults.standard.dictionary(forKey: daysFoundOnDriveKey) as? [String: String] ?? [:]
         for index in scenes.indices {
+            for angleIndex in scenes[index].angles.indices where scenes[index].angles[angleIndex].driveId == nil {
+                if let id = found[scenes[index].session] {
+                    scenes[index].angles[angleIndex].driveId = id
+                    scenes[index].angles[angleIndex].uploaded = scenes[index].angles[angleIndex].bytes
+                }
+            }
             for angleIndex in scenes[index].angles.indices where scenes[index].angles[angleIndex].thumbs.isEmpty {
                 scenes[index].angles[angleIndex].thumbs = phoneThumbs[scenes[index].session] ?? []
             }
@@ -529,9 +538,14 @@ final class DaysIndex: ObservableObject {
         }
         let files = localRecordings()
         for scene in phone.scenes where scene.endMs != nil && scene.session != phone.live?.session && !requeued.contains(scene.session) {
-            guard let angle = scene.angles.first(where: { $0.angle == "phone" }), angle.driveId == nil, angle.bytes > 0,
-                  let url = localFile(for: scene, in: files),
-                  let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date,
+            guard let angle = scene.angles.first(where: { $0.angle == "phone" }), angle.driveId == nil, angle.bytes > 0 else {
+                continue
+            }
+            guard let url = localFile(for: scene, in: files) else {
+                probeDrive(scene.session, bytes: angle.bytes)
+                continue
+            }
+            guard let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date,
                   Date().timeIntervalSince(modified) > 120
             else {
                 continue
@@ -539,6 +553,25 @@ final class DaysIndex: ObservableObject {
             requeued.insert(scene.session)
             daysLog("index requeue \(scene.session) \(url.lastPathComponent)")
             driveUploader.requeue(name: scene.session, startMs: scene.startMs, path: url.path)
+        }
+    }
+
+    private func probeDrive(_ session: String, bytes: Int64) {
+        guard !probed.contains(session) else {
+            return
+        }
+        probed.insert(session)
+        Task {
+            guard let file = try? await api.findAnywhere(name: "\(session).mp4"), file.size >= bytes else {
+                daysLog("index lost \(session): no local file and not on Drive")
+                return
+            }
+            var found = UserDefaults.standard.dictionary(forKey: daysFoundOnDriveKey) as? [String: String] ?? [:]
+            found[session] = file.id
+            UserDefaults.standard.set(found, forKey: daysFoundOnDriveKey)
+            daysLog("index found on Drive \(session) \(file.size)")
+            rebuildPhone()
+            push()
         }
     }
 

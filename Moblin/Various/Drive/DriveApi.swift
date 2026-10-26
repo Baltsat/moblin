@@ -237,6 +237,21 @@ final class DriveApi: Sendable {
         return try JSONDecoder().decode(DriveFileList.self, from: data).files.first?.id
     }
 
+    func findAnywhere(name: String) async throws -> (id: String, size: Int64)? {
+        var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")!
+        components.queryItems = [
+            URLQueryItem(name: "q", value: "name='\(name)' and trashed=false"),
+            URLQueryItem(name: "fields", value: "files(id,size)"),
+            URLQueryItem(name: "pageSize", value: "5"),
+        ]
+        let (response, data) = try await send(URLRequest(url: components.url!), body: nil)
+        try check(response, data, ok: [200])
+        let files = (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["files"] as? [[String: Any]] ?? []
+        return files.compactMap { file in
+            (file["id"] as? String).map { ($0, Int64(file["size"] as? String ?? "") ?? 0) }
+        }.max { $0.1 < $1.1 }
+    }
+
     func downloadMedia(fileId: String) async throws -> Data {
         let url = URL(string: "https://www.googleapis.com/drive/v3/files/\(fileId)?alt=media")!
         let (response, data) = try await send(URLRequest(url: url), body: nil)
