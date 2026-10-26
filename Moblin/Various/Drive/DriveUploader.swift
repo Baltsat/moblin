@@ -827,8 +827,9 @@ private actor DriveEngine {
         let total = session.manifest.bytesTotal
         let acked = session.manifest.acked
         if inBackground, !DaysPace.live {
+            let whole = acked == 0
             session.manifest.remStart = acked
-            session.manifest.remEnd = min(acked + driveGroupBytes, total)
+            session.manifest.remEnd = whole ? total : min(acked + driveGroupBytes, total)
             session.manifest.remReady = false
             session.save()
             try assemble(session)
@@ -856,7 +857,11 @@ private actor DriveEngine {
             return
         }
         if session.manifest.fromFile, let local = localFile(session.manifest) {
-            try daysCopyRange(local.url, start: start, end: end, out: remainderUrl(session))
+            if start == 0, end == local.size {
+                try daysCloneFile(local.url, out: remainderUrl(session))
+            } else {
+                try daysCopyRange(local.url, start: start, end: end, out: remainderUrl(session))
+            }
             session.manifest.remReady = true
             session.save()
             return
@@ -879,9 +884,16 @@ private actor DriveEngine {
         else {
             return false
         }
+        var end = end
         let acked = session.manifest.acked
         if acked > start {
-            try daysTrimFile(remainderUrl(session), dropFirst: acked - start)
+            if session.manifest.fromFile, end - acked > driveGroupBytes, let local = localFile(session.manifest) {
+                end = acked + driveGroupBytes
+                try daysCopyRange(local.url, start: acked, end: end, out: remainderUrl(session))
+                session.manifest.remEnd = end
+            } else {
+                try daysTrimFile(remainderUrl(session), dropFirst: acked - start)
+            }
             session.manifest.remStart = acked
         }
         var request = URLRequest(url: url)

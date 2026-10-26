@@ -68,6 +68,13 @@ func daysReadRange(_ file: URL, offset: Int64, count: Int) throws -> Data {
     return try handle.read(upToCount: count) ?? Data()
 }
 
+func daysCloneFile(_ source: URL, out: URL) throws {
+    let manager = FileManager.default
+    try? manager.removeItem(at: out)
+    try manager.copyItem(at: source, to: out)
+    try? manager.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: out.path)
+}
+
 func daysCopyRange(_ source: URL, start: Int64, end: Int64, out: URL) throws {
     let manager = FileManager.default
     try? manager.removeItem(at: out)

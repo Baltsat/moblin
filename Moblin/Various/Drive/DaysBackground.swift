@@ -42,7 +42,7 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
             configuration.isDiscretionary = false
             configuration.allowsCellularAccess = true
             configuration.timeoutIntervalForRequest = 120
-            configuration.timeoutIntervalForResource = 6 * 3600
+            configuration.timeoutIntervalForResource = 7 * 24 * 3600
             let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
             laneSessions[lane] = session
             return session

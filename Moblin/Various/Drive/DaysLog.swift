@@ -28,7 +28,7 @@ final class DaysLog: @unchecked Sendable {
             logger.info("days: log write failed \(error)")
         }
         writes += 1
-        if writes % 50 == 0 {
+        if writes % 500 == 0 {
             trim()
         }
     }
@@ -38,10 +38,10 @@ final class DaysLog: @unchecked Sendable {
             return
         }
         let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
-        guard lines.count > 600 else {
+        guard lines.count > 12000 else {
             return
         }
-        try? Data((lines.suffix(450).joined(separator: "\n") + "\n").utf8).write(to: url, options: .atomic)
+        try? Data((lines.suffix(9000).joined(separator: "\n") + "\n").utf8).write(to: url, options: .atomic)
     }
 }
 
