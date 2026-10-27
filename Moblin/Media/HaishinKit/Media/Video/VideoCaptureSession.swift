@@ -231,6 +231,10 @@ private final class DeviceOutputHandler: NSObject, AVCaptureVideoDataOutputSampl
             delegate?.videoCaptureSessionDidOutput(device, cameraId, sampleBuffer)
         }
     }
+
+    func captureOutput(_: AVCaptureOutput, didDrop _: CMSampleBuffer, from _: AVCaptureConnection) {
+        DaysGovernor.noteDroppedFrame()
+    }
 }
 
 private struct CaptureSessionDevice {

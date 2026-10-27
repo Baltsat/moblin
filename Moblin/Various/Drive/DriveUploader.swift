@@ -579,7 +579,7 @@ private actor DriveEngine {
             .filter { !$0.manifest.done && !$0.manifest.failed && !$0.manifest.bgActive && workers[$0.manifest.name] == nil }
             .sorted { ($0.manifest.bytesTotal - $0.manifest.acked) < ($1.manifest.bytesTotal - $1.manifest.acked) }
         let detached = sessions.values.filter { $0.manifest.bgActive }.count
-        var free = (DaysPace.live ? 1 : DaysBackgroundUploader.lanes) - workers.count - detached
+        var free = (DaysPace.live ? DaysPace.lanes : DaysBackgroundUploader.lanes) - workers.count - detached
         for session in eligible where free > 0 {
             guard let lane = freeLane() else {
                 break
@@ -611,7 +611,7 @@ private actor DriveEngine {
                 setStatus("Google Drive: waiting for network")
                 break
             }
-            if DaysPace.live, lane != 0 {
+            if DaysPace.live, lane >= DaysPace.lanes {
                 break
             }
             do {
@@ -733,6 +733,7 @@ private actor DriveEngine {
         let committed = current === session ? session.tailIndex : session.committedParts()
         let ackedParts = Int(session.manifest.acked) / drivePartSize
         if ackedParts < committed {
+            await DaysPace.pauseWhileLive()
             let skip = Int(session.manifest.acked) - ackedParts * drivePartSize
             var chunk = Data()
             let paced = DaysPace.live
