@@ -28,6 +28,12 @@ extension Model {
             UserDefaults.standard.set(true, forKey: lowLightKey)
         }
         DaysBackgroundUploader.shared.start()
+        if !UserDefaults.standard.bool(forKey: "daysWidestLens1"), !widestBackCameraId.isEmpty {
+            for scene in database.scenes where scene.videoSource.cameraPosition == .back {
+                scene.videoSource.backCameraId = widestBackCameraId
+            }
+            UserDefaults.standard.set(true, forKey: "daysWidestLens1")
+        }
         applyDaysCaptureMigration()
         applyDaysBitrateMigration()
         applyDaysFocusMigration()
@@ -302,7 +308,7 @@ extension Model {
         guard !UserDefaults.standard.bool(forKey: key) else {
             return
         }
-        let wide = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)?.uniqueID
+        let wide = widestBackCameraId.isEmpty ? nil : widestBackCameraId
         let backPositions: Set<SettingsSceneCameraPosition> = [
             .back, .backDualLowEnergy, .backTripleLowEnergy, .backWideDualLowEnergy,
         ]
