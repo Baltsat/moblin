@@ -641,7 +641,7 @@ func sleep(milliSeconds: Int) async throws {
     try await Task.sleep(nanoseconds: UInt64(milliSeconds) * 1_000_000)
 }
 
-let moblinAppGroup = "group.com.eerimoq.Moblin"
+let moblinAppGroup = "group.com.baltsat.days"
 
 extension Duration {
     var microseconds: Int64 {
