@@ -14,6 +14,15 @@ struct StreamViewLayout {
         let fullSize = CGSize(width: metrics.size.width + insets.leading + insets.trailing,
                               height: metrics.size.height + insets.top + insets.bottom)
         var size = CGSize(width: fullSize.width, height: fullSize.width / aspectRatio)
+        if portraitOrientation == portraitStream {
+            if size.height < fullSize.height {
+                size = CGSize(width: fullSize.height * aspectRatio, height: fullSize.height)
+            }
+            self.size = size
+            offset = CGSize(width: (fullSize.width - size.width) / 2 - insets.leading,
+                            height: (fullSize.height - size.height) / 2 - insets.top)
+            return
+        }
         if size.height > fullSize.height {
             size = CGSize(width: fullSize.height * aspectRatio, height: fullSize.height)
         }

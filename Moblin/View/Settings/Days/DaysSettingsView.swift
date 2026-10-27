@@ -549,5 +549,10 @@ struct DaysSettingsView: View {
             }
         }
         .navigationTitle("Days")
+        .scrollContentBackground(.hidden)
+        .background(DaysUI.bg.ignoresSafeArea())
+        .toolbarBackground(DaysUI.bg, for: .navigationBar)
+        .environment(\.colorScheme, .dark)
+        .tint(DaysUI.red)
     }
 }
