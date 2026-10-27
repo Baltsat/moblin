@@ -837,10 +837,14 @@ private actor DriveEngine {
             try assemble(session)
             return try await startDetached(session, uploadUrl: uploadUrl, lane: lane)
         }
-        let count = Int(min(Int64(driveChunkParts * drivePartSize), total - acked))
+        let paced = DaysPace.live
+        let started = Date()
+        let count = Int(min(Int64(paced ? DaysPace.chunkBytes : driveChunkParts * drivePartSize), total - acked))
         let chunk = try daysReadRange(local.url, offset: acked, count: count)
         session.needsResync = true
-        daysLog("put file chunk \(chunk.count) at \(acked)/\(total)")
+        if !paced {
+            daysLog("put file chunk \(chunk.count) at \(acked)/\(total)")
+        }
         let result = try await api.putChunk(
             uploadUrl: uploadUrl,
             data: chunk,
@@ -851,6 +855,9 @@ private actor DriveEngine {
         )
         session.needsResync = false
         _ = try await apply(result, to: session)
+        if paced {
+            await DaysPace.space(bytes: count, since: started)
+        }
         return true
     }
 
