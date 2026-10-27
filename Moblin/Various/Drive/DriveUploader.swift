@@ -615,7 +615,7 @@ private actor DriveEngine {
                 break
             }
             do {
-                guard try await step(session, lane: lane) else {
+                guard try await step(session, lane: lane), !session.manifest.done else {
                     break
                 }
                 failures[name] = 0

@@ -6,6 +6,21 @@ import SwiftUI
 private let daysIndexFolderKey = "daysIndexFolderId"
 private let daysIndexPhoneFileKey = "daysIndexPhoneFileId"
 private let daysIndexMacFileKey = "daysIndexMacFileId"
+private let daysIndexPhoneNameKey = "daysIndexPhoneName"
+
+private var daysPhoneIndexName: String {
+    if let name = UserDefaults.standard.string(forKey: daysIndexPhoneNameKey) {
+        return name
+    }
+    var info = utsname()
+    uname(&info)
+    let model = withUnsafeBytes(of: &info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+    let name = UserDefaults.standard.string(forKey: daysIndexPhoneFileKey) != nil
+        ? "iphone.json"
+        : "iphone-\(model.lowercased().replacingOccurrences(of: ",", with: "-")).json"
+    UserDefaults.standard.set(name, forKey: daysIndexPhoneNameKey)
+    return name
+}
 private let daysIndexSpritesKey = "daysIndexSprites"
 private let daysSpriteTriesKey = "daysIndexSpriteTries"
 private let daysIndexEndsKey = "daysIndexEnds2"
@@ -283,6 +298,7 @@ final class DaysIndex: ObservableObject {
     static let shared = DaysIndex()
 
     @Published private(set) var mac: DaysRawIndex?
+    @Published private(set) var otherPhones: [DaysRawIndex] = []
     @Published private(set) var phone = DaysRawIndex(device: "iphone",
                                                      tz: TimeZone.current.identifier,
                                                      updatedMs: 0,
@@ -621,7 +637,7 @@ final class DaysIndex: ObservableObject {
         cal.firstWeekday = 2
         var raw: [DaysRawScene] = []
         var failedStarts: [Int64] = []
-        for file in [mac, phone].compactMap({ $0 }) {
+        for file in [mac, phone].compactMap({ $0 }) + otherPhones {
             let live = file.live != nil && now - file.updatedMs < daysStaleMs
             for scene in file.scenes {
                 if scene.failed {
@@ -797,6 +813,15 @@ final class DaysIndex: ObservableObject {
             generatePhoneThumbs()
             resolveDurations()
             generatePhoneSprite()
+            if let files = try? await api.listFiles(prefix: "iphone", folderId: folder) {
+                var others: [DaysRawIndex] = []
+                for file in files where file.name != daysPhoneIndexName && file.name.hasSuffix(".json") {
+                    if let data = try? await api.downloadMedia(fileId: file.id), let loaded = DaysRawIndex(data: data) {
+                        others.append(loaded)
+                    }
+                }
+                otherPhones = others
+            }
             var fileId = UserDefaults.standard.string(forKey: daysIndexMacFileKey)
             if fileId == nil {
                 fileId = try? await api.findFile(name: "mac.json", folderId: folder)
@@ -874,7 +899,7 @@ final class DaysIndex: ObservableObject {
             seeded = true
             var own = UserDefaults.standard.string(forKey: daysIndexPhoneFileKey)
             if own == nil {
-                own = try? await api.findFile(name: "iphone.json", folderId: folder)
+                own = try? await api.findFile(name: daysPhoneIndexName, folderId: folder)
             }
             if let own, let data = try? await api.downloadMedia(fileId: own), let remote = DaysRawIndex(data: data) {
                 seedHistory(remote)
@@ -1024,14 +1049,14 @@ final class DaysIndex: ObservableObject {
             }
             var fileId = UserDefaults.standard.string(forKey: daysIndexPhoneFileKey)
             if fileId == nil {
-                fileId = try? await api.findFile(name: "iphone.json", folderId: folder)
+                fileId = try? await api.findFile(name: daysPhoneIndexName, folderId: folder)
             }
             do {
                 if let fileId {
                     try await api.updateJson(fileId: fileId, content: data)
                     UserDefaults.standard.set(fileId, forKey: daysIndexPhoneFileKey)
                 } else {
-                    let created = try await api.createJson(name: "iphone.json", folderId: folder, content: data)
+                    let created = try await api.createJson(name: daysPhoneIndexName, folderId: folder, content: data)
                     UserDefaults.standard.set(created, forKey: daysIndexPhoneFileKey)
                 }
                 daysLog("index pushed")

@@ -23,6 +23,7 @@ private final class DriveProgressDelegate: NSObject, URLSessionTaskDelegate, @un
 
 private struct DriveFile: Decodable {
     let id: String
+    let name: String?
 }
 
 private struct DriveFileList: Decodable {
@@ -235,6 +236,21 @@ final class DriveApi: Sendable {
         let (response, data) = try await send(URLRequest(url: components.url!), body: nil)
         try check(response, data, ok: [200])
         return try JSONDecoder().decode(DriveFileList.self, from: data).files.first?.id
+    }
+
+    func listFiles(prefix: String, folderId: String) async throws -> [(id: String, name: String)] {
+        var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")!
+        let query = "name contains '\(prefix)' and '\(folderId)' in parents and trashed=false"
+        components.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "fields", value: "files(id,name)"),
+            URLQueryItem(name: "pageSize", value: "50"),
+        ]
+        let (response, data) = try await send(URLRequest(url: components.url!), body: nil)
+        try check(response, data, ok: [200])
+        return try JSONDecoder().decode(DriveFileList.self, from: data).files.compactMap { file in
+            file.name.flatMap { $0.hasPrefix(prefix) ? (file.id, $0) : nil }
+        }
     }
 
     func findAnywhere(name: String) async throws -> (id: String, size: Int64)? {
