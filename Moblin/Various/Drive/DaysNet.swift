@@ -54,6 +54,7 @@ final class DaysNet: @unchecked Sendable {
             } else {
                 .wifi
             }
+            daysLog("net kind=\(kind) wifi=\(path.usesInterfaceType(.wifi)) cell=\(path.usesInterfaceType(.cellular)) expensive=\(path.isExpensive) constrained=\(path.isConstrained) status=\(path.status) avail=\(path.availableInterfaces.map { "\($0.type)" })")
             let observers = self.lock.withLock {
                 self.kind = kind
                 return self.observers
