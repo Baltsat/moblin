@@ -1,3 +1,4 @@
+import AVKit
 import SwiftUI
 
 enum DaysUI {
@@ -271,6 +272,7 @@ struct DaysHomeView: View {
                 Text("Season \(season.n)")
                     .font(.system(size: 22, weight: .semibold))
                     .tracking(-0.4)
+                DaysRecapButton(season: season.n)
                 Spacer()
                 Text("\(daysDates(season.start, tz: index.tz)) \u{00B7} \(daysDuration(season.totalMs(now: daysNow())))")
                     .font(.system(size: 13))
@@ -783,5 +785,72 @@ private struct DaysLiveStrip: View {
             }
             Spacer()
         }
+    }
+}
+
+private struct DaysRecapButton: View {
+    let season: Int
+    @State private var file: URL?
+    @State private var player: AVPlayer?
+
+    private var local: URL {
+        URL.applicationSupportDirectory.appending(path: "recap-S\(season).mp4")
+    }
+
+    var body: some View {
+        Group {
+            if let file {
+                Button {
+                    player = AVPlayer(url: file)
+                    player?.play()
+                } label: {
+                    Text("\u{25B6} Recap")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(.white))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .task { await load() }
+        .fullScreenCover(isPresented: Binding(get: { player != nil }, set: { if !$0 { player?.pause(); player = nil } })) {
+            ZStack(alignment: .topLeading) {
+                Color.black.ignoresSafeArea()
+                if let player {
+                    VideoPlayer(player: player).ignoresSafeArea()
+                }
+                Button {
+                    player?.pause()
+                    player = nil
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                }
+                .padding(.leading, 8)
+            }
+        }
+    }
+
+    private func load() async {
+        if FileManager.default.fileExists(atPath: local.path) {
+            file = local
+            return
+        }
+        let api = DriveApi()
+        guard let found = try? await api.findAnywhere(name: "recap-S\(season).mp4"),
+              let data = try? await api.downloadMedia(fileId: found.id)
+        else {
+            return
+        }
+        try? FileManager.default.createDirectory(at: local.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard (try? data.write(to: local, options: .atomic)) != nil else {
+            return
+        }
+        daysLog("recap S\(season) cached \(data.count) bytes")
+        file = local
     }
 }
