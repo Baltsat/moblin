@@ -123,7 +123,7 @@ extension Model {
             "wind_dir": now.wind.direction.converted(to: .degrees).value,
             "pressure_hpa": now.pressure.converted(to: .hectopascals).value,
             "visibility_m": now.visibility.converted(to: .meters).value,
-            "rain_mmh": now.precipitationIntensity.converted(to: .millimetersPerHour).value,
+            "rain_mmh": now.precipitationIntensity.converted(to: .metersPerSecond).value * 3_600_000,
             "daylight": now.isDaylight,
         ]
         if let day = weather.dailyForecast.first {
