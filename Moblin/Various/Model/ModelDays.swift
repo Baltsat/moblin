@@ -15,7 +15,13 @@ extension Model {
         for button in database.quickButtons {
             button.enabled = daysQuickButtons.contains(button.type)
         }
+        if database.streams.isEmpty {
+            let stream = SettingsStream(name: "Main")
+            stream.enabled = true
+            database.streams.append(stream)
+        }
         for stream in database.streams {
+            stream.backgroundStreaming = true
             stream.recording.uploadToDrive = true
             stream.recording.autoStartRecording = false
             stream.recording.autoStopRecording = false
@@ -298,12 +304,6 @@ final class DaysCaptureInfo: @unchecked Sendable {
 
 extension Model {
     fileprivate func applyDaysCaptureMigration() {
-        if !UserDefaults.standard.bool(forKey: "daysBackgroundMigration1") {
-            for stream in database.streams {
-                stream.backgroundStreaming = true
-            }
-            UserDefaults.standard.set(true, forKey: "daysBackgroundMigration1")
-        }
         let key = "daysCaptureMigration4"
         guard !UserDefaults.standard.bool(forKey: key) else {
             return

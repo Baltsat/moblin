@@ -820,7 +820,11 @@ final class DaysIndex: ObservableObject {
                         others.append(loaded)
                     }
                 }
+                if others.map(\.scenes.count) != otherPhones.map(\.scenes.count) {
+                    daysLog("index other phones \(files.map(\.name)) scenes \(others.map(\.scenes.count))")
+                }
                 otherPhones = others
+                rebuild()
             }
             var fileId = UserDefaults.standard.string(forKey: daysIndexMacFileKey)
             if fileId == nil {

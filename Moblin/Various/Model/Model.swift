@@ -1714,11 +1714,8 @@ final class Model: NSObject, ObservableObject {
     }
 
     private func backgroundRunLevel() -> BackgroundRunLevel {
-        if (isLive || isRecording) && stream.backgroundStreaming {
-            return .full
-        }
         if isLive || isRecording {
-            return .off
+            return .full
         }
         let keepChatRunning = database.chat.background || database.catPrinters.backgroundPrinting
         if keepChatRunning || database.moblink.relay.enabled {
