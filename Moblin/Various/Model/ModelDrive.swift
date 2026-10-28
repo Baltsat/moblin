@@ -1,6 +1,9 @@
 import CoreLocation
 import Foundation
 import UIKit
+import WeatherKit
+
+@MainActor private var driveLastWeatherDate: Date?
 
 extension Model {
     func makeDriveSessionInfo() -> DriveSessionInfo {
@@ -97,6 +100,42 @@ extension Model {
             "brightness": Double(UIScreen.main.brightness),
             "free_bytes": freeDiskBytes(),
         ]))
+    }
+
+    func driveRecordWeather() {
+        guard isDriveRecording(), let weather = weatherManager.getLatestWeather(),
+              weather.currentWeather.metadata.date != driveLastWeatherDate
+        else {
+            return
+        }
+        driveLastWeatherDate = weather.currentWeather.metadata.date
+        let now = weather.currentWeather
+        var values: [String: Any] = [
+            "at_ms": Int64(now.date.timeIntervalSince1970 * 1000),
+            "condition": now.condition.rawValue,
+            "temp_c": now.temperature.converted(to: .celsius).value,
+            "feels_c": now.apparentTemperature.converted(to: .celsius).value,
+            "dew_c": now.dewPoint.converted(to: .celsius).value,
+            "humidity": now.humidity,
+            "cloud": now.cloudCover,
+            "uv": now.uvIndex.value,
+            "wind_kmh": now.wind.speed.converted(to: .kilometersPerHour).value,
+            "wind_dir": now.wind.direction.converted(to: .degrees).value,
+            "pressure_hpa": now.pressure.converted(to: .hectopascals).value,
+            "visibility_m": now.visibility.converted(to: .meters).value,
+            "rain_mmh": now.precipitationIntensity.converted(to: .millimetersPerHour).value,
+            "daylight": now.isDaylight,
+        ]
+        if let day = weather.dailyForecast.first {
+            if let rise = day.sun.sunrise {
+                values["sunrise_ms"] = Int64(rise.timeIntervalSince1970 * 1000)
+            }
+            if let set = day.sun.sunset {
+                values["sunset_ms"] = Int64(set.timeIntervalSince1970 * 1000)
+            }
+            values["moon"] = day.moon.phase.rawValue
+        }
+        driveUploader.event(type: "weather", detail: driveDetail(values))
     }
 
     func driveRecordOrientation() {

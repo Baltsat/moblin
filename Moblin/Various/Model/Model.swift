@@ -1369,6 +1369,9 @@ final class Model: NSObject, ObservableObject {
     }
 
     private func isWeatherNeeded() -> Bool {
+        if stream.recording.uploadToDrive {
+            return true
+        }
         for widget in widgetsInCurrentSceneOrRemoteScene(onlyEnabled: true) {
             switch widget.widget.type {
             case .text:
@@ -1921,6 +1924,7 @@ final class Model: NSObject, ObservableObject {
         updateBatteryLevel()
         writeFileLogToFile()
         driveRecordDeviceSample()
+        driveRecordWeather()
     }
 
     func stopPeriodicTimers(keepChatRunning: Bool, keepBatteryLevelRunning: Bool) {
