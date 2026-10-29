@@ -144,7 +144,7 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
         for session in allSessions() {
             for task in await session.allTasks {
                 if let info = detachedInfo(task) {
-                    out.append((info.name, task.state, task.countOfBytesSent))
+                    out.append((info.name, task.state, info.base + task.countOfBytesSent))
                 }
             }
         }
@@ -207,7 +207,7 @@ final class DaysBackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked
                 daysQueue.live[info.name] = DaysLive(sent: total, speed: report.speed, at: report.at)
             }
         }
-        daysQueueUpdate(info.name) { $0.driveAcked = total }
+        daysQueueUpdate(info.name) { $0.driveAcked = max($0.driveAcked, total) }
     }
 
     func start() {

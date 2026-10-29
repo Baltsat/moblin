@@ -15,7 +15,7 @@ import SwiftUI
         return "Waiting for Wi-Fi"
     }
     if DaysPace.live {
-        return "Paced while live"
+        return "Slower while recording"
     }
     if text.contains("failed") || text.contains("lost") {
         return "Retrying"
@@ -63,7 +63,8 @@ struct DaysUploadsView: View {
 
     private var content: some View {
         let rows = rows
-        let left = rows.reduce(Int64(0)) { $0 + max($1.angle.bytes - $1.angle.uploaded, 0) }
+        let left = rows.filter { $0.scene.endMs != nil }
+            .reduce(Int64(0)) { $0 + max($1.angle.bytes - $1.angle.uploaded, 0) }
         let speed = queue.live.values.filter { Date().timeIntervalSince($0.at) < 4 }.map(\.speed).max() ?? 0
         let eta: String? = speed > 0 && left > 0 ? "~\(max(Int((Double(left) / speed / 60).rounded(.up)), 1)) min" : index.leftEta
         let reason = daysUploadReason(drive: drive)

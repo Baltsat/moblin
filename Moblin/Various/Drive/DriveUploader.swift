@@ -6,6 +6,8 @@ private let drivePartSize = 8 * 1024 * 1024
 private let driveChunkParts = 4
 private let driveGroupBytes: Int64 = 1 << 30
 private let driveMinFreeBytes: Int64 = 300 << 20
+private let driveDetachedMaxBytes: Int64 = 8 << 30
+private let driveDetachedReserveBytes: Int64 = 3 << 30
 
 final class DriveMeter: @unchecked Sendable {
     private let lock = NSLock()
@@ -261,6 +263,7 @@ private actor DriveEngine {
     private var lastStatus = ""
     private var lastBgLog = Date.distantPast
     private var bgProgress: [String: (sent: Int64, at: Date)] = [:]
+    private var bgSent: [String: Int64] = [:]
     private var folderIds: [String: String] = [:]
     private var meters: [String: DriveMeter] = [:]
     private let wakeStream: AsyncStream<Void>
@@ -460,6 +463,10 @@ private actor DriveEngine {
         session.manifest.failed = false
         session.needsResync = false
         session.save()
+        daysQueueUpdate(session.manifest.name) {
+            $0.driveAcked = 0
+            $0.driveTotal = local.size
+        }
         daysLog("restart from local file \(session.manifest.name) \(local.size)")
         return true
     }
@@ -525,6 +532,16 @@ private actor DriveEngine {
         guard sessions.values.contains(where: { $0.manifest.bgActive }) else {
             return
         }
+        if DaysPace.live {
+            for session in sessions.values where session.manifest.bgActive {
+                daysLog("detached task paused for recording \(session.manifest.name)")
+                await DaysBackgroundUploader.shared.cancelDetached(name: session.manifest.name)
+                session.manifest.bgActive = false
+                session.needsResync = true
+                session.save()
+            }
+            return
+        }
         let states = await DaysBackgroundUploader.shared.detachedStates()
         if Date().timeIntervalSince(lastBgLog) > 60 {
             lastBgLog = Date()
@@ -533,6 +550,7 @@ private actor DriveEngine {
         for session in sessions.values where session.manifest.bgActive {
             let name = session.manifest.name
             let live = states.filter { $0.name == name && $0.state != .completed }
+            bgSent[name] = live.map(\.sent).max()
             if live.isEmpty {
                 session.manifest.bgActive = false
                 session.needsResync = true
@@ -569,10 +587,10 @@ private actor DriveEngine {
             return
         }
         guard DaysNet.shared.canUpload() else {
+            updateStatus(publishText: false)
             if sessions.values.contains(where: { !$0.manifest.done && !$0.manifest.failed }) {
                 setStatus("Google Drive: waiting for network")
             }
-            updateStatus()
             return
         }
         let eligible = sessions.values
@@ -727,7 +745,7 @@ private actor DriveEngine {
         if session.manifest.fromFile {
             return try await stepFile(session, uploadUrl: uploadUrl, lane: lane)
         }
-        if inBackground, session.manifest.closed, !DaysPace.live, try await startBackground(session, uploadUrl: uploadUrl, lane: lane) {
+        if session.manifest.closed, !DaysPace.live, try await startBackground(session, uploadUrl: uploadUrl, lane: lane) {
             return false
         }
         let committed = current === session ? session.tailIndex : session.committedParts()
@@ -759,7 +777,7 @@ private actor DriveEngine {
             daysLog("chunk result \(result)")
             _ = try await apply(result, to: session)
             if paced {
-                setStatus("Google Drive: Paced for live")
+                setStatus("Google Drive: recording, uploading slowly")
                 await DaysPace.space(bytes: chunk.count, since: started)
             }
             return true
@@ -801,15 +819,20 @@ private actor DriveEngine {
         return values?.volumeAvailableCapacityForImportantUsage ?? 0
     }
 
+    private func detachedEnd(acked: Int64, total: Int64) -> Int64 {
+        let room = min(max(freeBytes() - driveDetachedReserveBytes, driveGroupBytes), driveDetachedMaxBytes)
+        if total - acked <= room {
+            return total
+        }
+        return (acked + room) / Int64(drivePartSize) * Int64(drivePartSize)
+    }
+
     private func startBackground(_ session: DriveSession, uploadUrl: String, lane: Int) async throws -> Bool {
         let manifest = session.manifest
         guard manifest.bytesTotal > manifest.acked, freeBytes() > driveMinFreeBytes else {
             return false
         }
-        let remaining = manifest.bytesTotal - manifest.acked
-        let end: Int64 = remaining <= driveGroupBytes
-            ? manifest.bytesTotal
-            : (manifest.acked + driveGroupBytes) / Int64(drivePartSize) * Int64(drivePartSize)
+        let end = detachedEnd(acked: manifest.acked, total: manifest.bytesTotal)
         session.manifest.remStart = manifest.acked
         session.manifest.remEnd = end
         session.manifest.remReady = false
@@ -828,10 +851,10 @@ private actor DriveEngine {
         await DaysPace.pauseWhileLive()
         let total = session.manifest.bytesTotal
         let acked = session.manifest.acked
-        if inBackground, !DaysPace.live {
+        if !DaysPace.live {
             let whole = acked == 0
             session.manifest.remStart = acked
-            session.manifest.remEnd = whole ? total : min(acked + driveGroupBytes, total)
+            session.manifest.remEnd = whole ? total : detachedEnd(acked: acked, total: total)
             session.manifest.remReady = false
             session.save()
             try assemble(session)
@@ -896,7 +919,7 @@ private actor DriveEngine {
         let acked = session.manifest.acked
         if acked > start {
             if session.manifest.fromFile, end - acked > driveGroupBytes, let local = localFile(session.manifest) {
-                end = acked + driveGroupBytes
+                end = detachedEnd(acked: acked, total: session.manifest.bytesTotal)
                 try daysCopyRange(local.url, start: acked, end: end, out: remainderUrl(session))
                 session.manifest.remEnd = end
             } else {
@@ -926,19 +949,21 @@ private actor DriveEngine {
         guard let start = session.manifest.remStart, let end = session.manifest.remEnd else {
             return false
         }
-        if !session.manifest.remReady {
-            try assemble(session)
-        }
-        if session.manifest.acked >= end {
+        if session.manifest.acked >= end || (DaysPace.live && session.manifest.fromFile) {
             clearRemainder(session)
             return true
         }
-        if inBackground, !DaysPace.live {
+        if !session.manifest.remReady {
+            try assemble(session)
+        }
+        guard DaysPace.live else {
             _ = try await startDetached(session, uploadUrl: uploadUrl, lane: lane)
             return false
         }
+        await DaysPace.pauseWhileLive()
+        let started = Date()
         let acked = session.manifest.acked
-        let count = Int(min(Int64(driveChunkParts * drivePartSize), end - acked))
+        let count = Int(min(Int64(DaysPace.chunkBytes), end - acked))
         let chunk = try daysReadRange(remainderUrl(session), offset: acked - start, count: count)
         session.needsResync = true
         let result = try await api.putChunk(
@@ -951,6 +976,7 @@ private actor DriveEngine {
         )
         session.needsResync = false
         _ = try await apply(result, to: session)
+        await DaysPace.space(bytes: count, since: started)
         return true
     }
 
@@ -1129,7 +1155,7 @@ private actor DriveEngine {
         session.save()
     }
 
-    private func updateStatus() {
+    private func updateStatus(publishText: Bool = true) {
         let pending = sessions.values.filter { !$0.manifest.done }
         guard !pending.isEmpty else {
             DispatchQueue.main.async {
@@ -1147,10 +1173,12 @@ private actor DriveEngine {
                 : Int64(session.tailIndex * drivePartSize + session.buffer.count)
             let acked = session.manifest.acked
             daysQueueUpdate(session.manifest.name, startMs: session.manifest.startMs) {
-                $0.driveAcked = acked
+                $0.driveAcked = max($0.driveAcked, acked)
                 $0.driveTotal = total
             }
-            queued += total - session.manifest.acked
+            if session !== current {
+                queued += total - max(acked, bgSent[session.manifest.name] ?? 0)
+            }
         }
         let count = pending.count
         let bytes = max(queued, 0)
@@ -1160,8 +1188,11 @@ private actor DriveEngine {
                 daysNetStatus.queueBytes = bytes
             }
         }
+        guard publishText else {
+            return
+        }
         let background = pending.contains { $0.manifest.bgActive }
-        let live = background ? "in background, " : DaysPace.live ? "Paced for live, " : current != nil ? "recording, " : ""
+        let live = background ? "in background, " : current != nil ? "recording, " : ""
         setStatus("Google Drive: \(live)\(pending.count) queued, \(UInt64(max(queued, 0)).formatBytes()) left")
     }
 
