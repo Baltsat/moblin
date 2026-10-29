@@ -394,6 +394,7 @@ struct DaysOverlayView: View {
     let isRecording: Bool
     @ObservedObject private var daysIndex = DaysIndex.shared
     @State private var showHome = false
+    @ObservedObject private var prompter = DaysPrompter.shared
 
     private var rec: Bool {
         isRecording || daysFakeRecording
@@ -418,6 +419,11 @@ struct DaysOverlayView: View {
         HStack(spacing: 10) {
             if !rec {
                 DaysQualityChip(model: model)
+            }
+            DaysRoundButton(systemName: "text.alignleft", size: rec ? 40 : 44,
+                            tint: prompter.shown ? .yellow : .white)
+            {
+                prompter.shown.toggle()
             }
             DaysRoundButton(systemName: "film.stack", size: rec ? 40 : 44) {
                 showHome = true
@@ -455,7 +461,15 @@ struct DaysOverlayView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            content(portrait: geometry.size.height >= geometry.size.width)
+            ZStack {
+                DaysPrompterOverlay(screen: geometry.size)
+                content(portrait: geometry.size.height >= geometry.size.width)
+            }
+        }
+        .onChange(of: isRecording) { recording in
+            if recording {
+                prompter.takeStarted()
+            }
         }
         .fullScreenCover(isPresented: $showHome) {
             DaysHomeView(index: daysIndex).environmentObject(model)
@@ -496,6 +510,9 @@ struct DaysOverlayView: View {
                 Spacer()
                 DaysLockBadge(camera: model.camera)
                     .padding(.bottom, 10)
+                DaysPrompterControls()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 12)
                 controls
                     .padding(.bottom, 22)
                 record
@@ -508,6 +525,8 @@ struct DaysOverlayView: View {
                 VStack(alignment: .leading) {
                     pill
                     Spacer()
+                    DaysPrompterControls()
+                        .padding(.bottom, 8)
                     HStack {
                         controls
                     }
@@ -646,7 +665,8 @@ struct DaysDimView: View {
             }
         }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            dim.tick(active: model.isRecording && model.showingPanel == .none && !model.showStealthMode)
+            dim.tick(active: model.isRecording && model.showingPanel == .none && !model.showStealthMode
+                && !DaysPrompter.shared.shown)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
             dim.wake()
