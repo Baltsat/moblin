@@ -131,11 +131,9 @@ private let backWideDualLowEnergyCamera = Camera(
 
 extension Model {
     func setFocusPointOfInterest(focusPoint: CGPoint) {
-        guard
-            let device = cameraDevice, device.isFocusPointOfInterestSupported
+        guard let device = cameraDevice,
+              device.isFocusPointOfInterestSupported || device.isExposurePointOfInterestSupported
         else {
-            logger.info("Tap to focus not supported for this camera")
-            makeErrorToast(title: String(localized: "Tap to focus not supported for this camera"))
             return
         }
         var focusPointOfInterest = focusPoint
@@ -148,10 +146,14 @@ extension Model {
         }
         do {
             try device.lockForConfiguration()
-            device.focusPointOfInterest = focusPointOfInterest
-            device.focusMode = .autoFocus
-            device.exposurePointOfInterest = focusPointOfInterest
-            device.exposureMode = .autoExpose
+            if device.isFocusPointOfInterestSupported, device.isFocusModeSupported(.autoFocus) {
+                device.focusPointOfInterest = focusPointOfInterest
+                device.focusMode = .autoFocus
+            }
+            if device.isExposurePointOfInterestSupported, device.isExposureModeSupported(.autoExpose) {
+                device.exposurePointOfInterest = focusPointOfInterest
+                device.exposureMode = .autoExpose
+            }
             device.isSubjectAreaChangeMonitoringEnabled = true
             device.unlockForConfiguration()
             camera.setManualFocusPoint(value: focusPoint)
@@ -166,7 +168,9 @@ extension Model {
 
     func setAutoFocus() {
         stopMotionDetection()
-        guard let device = cameraDevice, device.isFocusPointOfInterestSupported else {
+        guard let device = cameraDevice,
+              device.isFocusPointOfInterestSupported || device.isExposurePointOfInterestSupported
+        else {
             return
         }
         do {
