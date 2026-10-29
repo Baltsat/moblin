@@ -34,6 +34,12 @@ extension Model {
             UserDefaults.standard.set(true, forKey: lowLightKey)
         }
         DaysBackgroundUploader.shared.start()
+        if !UserDefaults.standard.bool(forKey: "daysAutoQuality1") {
+            if DaysPreset.current == .allDay {
+                DaysPreset.set(.auto)
+            }
+            UserDefaults.standard.set(true, forKey: "daysAutoQuality1")
+        }
         if !UserDefaults.standard.bool(forKey: "daysWidestLens1"), !widestBackCameraId.isEmpty {
             for scene in database.scenes where scene.videoSource.cameraPosition == .back {
                 scene.videoSource.backCameraId = widestBackCameraId
@@ -128,8 +134,8 @@ extension Model {
         storeSettings()
     }
 
-    /// user-req: one button, best quality the hardware can hold without dropped frames. Auto decides before each take,
-    /// never mid-take: 4K30 HEVC while cool, 1080p60 when warm, 1080p30 when hot or short on space.
+    /// user-req: Auto aims for the best picture; it drops below 4K only when the phone is critically hot or storage runs
+    /// low. Decided before each take, never mid-take.
     func daysAutoPreset() {
         guard !isRecording else {
             return
@@ -140,9 +146,9 @@ extension Model {
             let heat = statusOther.thermalState
             let free = (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
                 .volumeAvailableCapacityForImportantUsage ?? Int64.max
-            if heat.rawValue >= ProcessInfo.ThermalState.serious.rawValue || free < 60_000_000_000 {
+            if heat == .critical || free < 20_000_000_000 {
                 target = .allDay
-            } else if heat == .fair || free < 120_000_000_000 {
+            } else if heat == .serious || free < 50_000_000_000 {
                 target = .smooth
             } else {
                 target = .max
@@ -213,16 +219,16 @@ enum DaysPreset: String, CaseIterable {
                    recordingCodec: .h265hevc, recordingBitrate: 16_000_000)
         case .max:
             Values(resolution: .r3840x2160, fps: 30, streamBitrate: 12_000_000,
-                   recordingCodec: .h265hevc, recordingBitrate: 35_000_000)
+                   recordingCodec: .h265hevc, recordingBitrate: 45_000_000)
         }
     }
 
     var title: LocalizedStringKey {
         switch self {
-        case .auto: "Auto"
-        case .allDay: "All-day"
-        case .smooth: "Smooth"
-        case .max: "Max quality"
+        case .auto: "Auto (best possible)"
+        case .allDay: "All-day · 1080p30"
+        case .smooth: "Smooth · 1080p60"
+        case .max: "Max · 4K30"
         }
     }
 
@@ -318,8 +324,7 @@ extension Model {
                 scene.videoSource.backCameraId = wide
             }
         }
-        DaysPreset.set(.allDay)
-        daysApplyPreset(.allDay, reload: false)
+        DaysPreset.set(.auto)
         UserDefaults.standard.set(true, forKey: key)
     }
 

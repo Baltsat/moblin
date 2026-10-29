@@ -229,8 +229,10 @@ private struct DaysRecordingSection: View {
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(effectiveLine)
-                if preset == .max {
-                    Text("Short scenes. Runs hot. ~13 GB/hour. Cannot be live-streamed smoothly on a 33 Mbps uplink.")
+                if preset == .auto {
+                    Text("Auto records 4K30 when there is room and the phone is not overheating; it steps down only when storage is low or the phone is very hot. Decided before each take.")
+                } else if preset == .max {
+                    Text("4K30 HEVC 45 Mbps, about 20 GB per hour.")
                 }
             }
         }
