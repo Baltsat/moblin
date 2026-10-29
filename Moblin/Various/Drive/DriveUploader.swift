@@ -317,13 +317,8 @@ private actor DriveEngine {
         case let .requeue(name, startMs, path):
             requeue(name: name, startMs: startMs, path: path)
             wake()
-        case let .bgFinished(name):
+        case .bgFinished:
             recover()
-            if let session = sessions[name] {
-                session.manifest.bgActive = false
-                session.needsResync = true
-                session.save()
-            }
             wake()
         }
     }
@@ -551,7 +546,11 @@ private actor DriveEngine {
             let name = session.manifest.name
             let live = states.filter { $0.name == name && $0.state != .completed }
             bgSent[name] = live.map(\.sent).max()
-            if live.isEmpty {
+            if live.count > 1 {
+                daysLog("detached tasks duplicated \(name) x\(live.count), restarting one")
+                await DaysBackgroundUploader.shared.cancelDetached(name: name)
+            }
+            if live.count != 1 {
                 session.manifest.bgActive = false
                 session.needsResync = true
                 session.save()
@@ -837,6 +836,7 @@ private actor DriveEngine {
         session.manifest.remEnd = end
         session.manifest.remReady = false
         session.save()
+        await DaysBackgroundUploader.shared.cancelDetached(name: session.manifest.name)
         try assemble(session)
         return try await startDetached(session, uploadUrl: uploadUrl, lane: lane)
     }
@@ -857,6 +857,7 @@ private actor DriveEngine {
             session.manifest.remEnd = whole ? total : detachedEnd(acked: acked, total: total)
             session.manifest.remReady = false
             session.save()
+            await DaysBackgroundUploader.shared.cancelDetached(name: session.manifest.name)
             try assemble(session)
             return try await startDetached(session, uploadUrl: uploadUrl, lane: lane)
         }
@@ -916,6 +917,7 @@ private actor DriveEngine {
         else {
             return false
         }
+        await DaysBackgroundUploader.shared.cancelDetached(name: session.manifest.name)
         let acked = session.manifest.acked
         if acked > start {
             if session.manifest.fromFile, end - acked > driveGroupBytes, let local = localFile(session.manifest) {
@@ -954,6 +956,7 @@ private actor DriveEngine {
             return true
         }
         if !session.manifest.remReady {
+            await DaysBackgroundUploader.shared.cancelDetached(name: session.manifest.name)
             try assemble(session)
         }
         guard DaysPace.live else {

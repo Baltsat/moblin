@@ -51,9 +51,13 @@ func daysTrimFile(_ file: URL, dropFirst: Int64) throws {
     let input = try FileHandle(forReadingFrom: file)
     let output = try FileHandle(forWritingTo: copy)
     try input.seek(toOffset: UInt64(dropFirst))
-    while let block = try input.read(upToCount: 8 * 1024 * 1024), !block.isEmpty {
+    while try autoreleasepool(invoking: {
+        guard let block = try input.read(upToCount: 8 * 1024 * 1024), !block.isEmpty else {
+            return false
+        }
         try output.write(contentsOf: block)
-    }
+        return true
+    }) {}
     try output.synchronize()
     try output.close()
     try input.close()
@@ -87,9 +91,13 @@ func daysCopyRange(_ source: URL, start: Int64, end: Int64, out: URL) throws {
     }
     try input.seek(toOffset: UInt64(start))
     var left = end - start
-    while left > 0, let block = try input.read(upToCount: Int(min(left, 8 * 1024 * 1024))), !block.isEmpty {
+    while try left > 0 && autoreleasepool(invoking: {
+        guard let block = try input.read(upToCount: Int(min(left, 8 * 1024 * 1024))), !block.isEmpty else {
+            return false
+        }
         try output.write(contentsOf: block)
         left -= Int64(block.count)
-    }
+        return true
+    }) {}
     try output.synchronize()
 }

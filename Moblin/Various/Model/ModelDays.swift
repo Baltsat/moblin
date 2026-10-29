@@ -129,6 +129,7 @@ extension Model {
             scene.videoSource.cameraPosition = .front
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        daysAutoPreset()
         sceneUpdated(attachCamera: true, updateRemoteScene: false)
         daysPickStereoMic()
         storeSettings()
@@ -150,8 +151,10 @@ extension Model {
                 target = .allDay
             } else if heat == .serious || free < 50_000_000_000 {
                 target = .smooth
-            } else {
+            } else if daysCameraHas4K() {
                 target = .max
+            } else {
+                target = .smooth
             }
         }
         guard DaysQuality.shared.applied != target else {
@@ -160,6 +163,16 @@ extension Model {
         DaysQuality.shared.applied = target
         daysLog("quality \(chosen.rawValue) -> \(target.short)")
         daysApplyPreset(target)
+    }
+
+    private func daysCameraHas4K() -> Bool {
+        let position = getSelectedScene()?.videoSource.cameraPosition ?? .back
+        guard let device = preferredCamera(position: position == .front ? .front : .back) else {
+            return true
+        }
+        return device.formats.contains {
+            $0.formatDescription.dimensions.width == 3840 && $0.formatDescription.dimensions.height == 2160
+        }
     }
 
     func daysThermalChanged() {
