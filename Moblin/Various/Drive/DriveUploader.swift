@@ -354,6 +354,7 @@ private actor DriveEngine {
     private func startSession(info: DriveSessionInfo) {
         let start = Date()
         let name = "\(driveNameFormatter.string(from: start))_phone"
+        UserDefaults(suiteName: moblinAppGroup)?.set(name, forKey: "daysTake")
         let dir = createAndGetDirectory(root: root, name: name)
         let session = DriveSession(
             manifest: DriveManifest(name: name, startMs: nowMs(), info: info),
@@ -394,6 +395,7 @@ private actor DriveEngine {
         guard let session = current else {
             return
         }
+        UserDefaults(suiteName: moblinAppGroup)?.removeObject(forKey: "daysTake")
         try? session.handle?.close()
         session.handle = nil
         session.manifest.closed = true
@@ -488,6 +490,10 @@ private actor DriveEngine {
     }
 
     private func recover() {
+        for file in daysScreenFiles() {
+            let name = file.deletingPathExtension().lastPathComponent
+            requeue(name: name, startMs: daysScreenStartMs(name), path: file.path)
+        }
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         for name in names.sorted() where sessions[name] == nil {
             let dir = root.appending(component: name)
@@ -1068,10 +1074,13 @@ private actor DriveEngine {
         guard day.count == 3 else {
             return try await ensureFolderPath(["phone"])
         }
+        if daysIsScreen(name) {
+            return try await ensureFolderPath([day[0], day[1], day[2], "screen"], isPhone: false)
+        }
         return try await ensureFolderPath([day[0], day[1], day[2], drivePhoneFolderName])
     }
 
-    private func ensureFolderPath(_ parts: [String]) async throws -> String {
+    private func ensureFolderPath(_ parts: [String], isPhone: Bool = true) async throws -> String {
         let dais = try await cachedFolder(key: "", name: driveRootFolderName, parent: "root")
         var parent = dais
         var key = ""
@@ -1079,7 +1088,9 @@ private actor DriveEngine {
             key += "/" + part
             parent = try await cachedFolder(key: key, name: part, parent: parent)
         }
-        daysSaveFolderIds(root: dais, phone: parent)
+        if isPhone {
+            daysSaveFolderIds(root: dais, phone: parent)
+        }
         return parent
     }
 
@@ -1295,6 +1306,34 @@ final class DriveUploader: @unchecked Sendable {
 }
 
 let driveUploader = DriveUploader()
+
+func daysIsScreen(_ name: String) -> Bool {
+    name.contains("screen")
+}
+
+func daysScreenFiles() -> [URL] {
+    guard let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: moblinAppGroup)?
+        .appending(component: "Screen")
+    else {
+        return []
+    }
+    let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+    return names.filter { $0.hasSuffix(".mov") }.sorted().map { dir.appending(component: $0) }
+}
+
+func daysScreenStartMs(_ name: String) -> Int64 {
+    let stamp = String(name.prefix(17))
+    let date = driveNameFormatter.date(from: stamp) ?? Date()
+    return Int64(date.timeIntervalSince1970 * 1000)
+}
+
+func daysObserveScreen() {
+    CFNotificationCenterAddObserver(
+        CFNotificationCenterGetDarwinNotifyCenter(), nil,
+        { _, _, _, _, _ in driveUploader.resume() },
+        "com.baltsat.days.screen" as CFString, nil, .deliverImmediately
+    )
+}
 
 func daysCurrentPath(_ path: String) -> String {
     guard !FileManager.default.fileExists(atPath: path), let range = path.range(of: "/Documents/") else {

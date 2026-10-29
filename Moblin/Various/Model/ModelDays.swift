@@ -34,6 +34,7 @@ extension Model {
             UserDefaults.standard.set(true, forKey: lowLightKey)
         }
         DaysBackgroundUploader.shared.start()
+        daysObserveScreen()
         if !UserDefaults.standard.bool(forKey: "daysAutoQuality1") {
             if DaysPreset.current == .allDay {
                 DaysPreset.set(.auto)

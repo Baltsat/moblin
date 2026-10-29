@@ -1,3 +1,4 @@
+import ReplayKit
 import AlertToast
 import SwiftUI
 
@@ -217,6 +218,24 @@ private struct DaysTorchButton: View {
     }
 }
 
+private struct DaysScreenButton: UIViewRepresentable {
+    func makeUIView(context _: Context) -> RPSystemBroadcastPickerView {
+        let picker = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
+        picker.preferredExtension = "\(Bundle.main.bundleIdentifier ?? "").Moblin-Capture"
+        picker.showsMicrophoneButton = true
+        for case let button as UIButton in picker.subviews {
+            button.setImage(UIImage(systemName: "rectangle.on.rectangle",
+                                    withConfiguration: UIImage.SymbolConfiguration(pointSize: 17)), for: .normal)
+            button.tintColor = .white
+        }
+        picker.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        picker.layer.cornerRadius = 22
+        return picker
+    }
+
+    func updateUIView(_: RPSystemBroadcastPickerView, context _: Context) {}
+}
+
 private struct DaysFlipButton: View {
     let model: Model
 
@@ -421,6 +440,8 @@ struct DaysOverlayView: View {
                 model.setStealthMode(on: true)
             }
             DaysFlipButton(model: model)
+            DaysScreenButton()
+                .frame(width: 44, height: 44)
             DaysTorchButton(model: model, overlay: model.streamOverlay)
             DaysZoomIfBack(model: model, overlay: model.streamOverlay)
         }

@@ -100,6 +100,9 @@ final class DaysQueue: ObservableObject {
 let daysQueue = DaysQueue()
 
 func daysQueueUpdate(_ name: String, startMs: Int64? = nil, _ change: @escaping @Sendable (inout DaysQueueItem) -> Void) {
+    guard !daysIsScreen(name) else {
+        return
+    }
     DispatchQueue.main.async {
         MainActor.assumeIsolated {
             daysQueue.apply(name, startMs: startMs, change)
