@@ -455,6 +455,7 @@ final class DaysIndex: ObservableObject {
     #endif
 
     private func startPulling() {
+        DaysRecaps.shared.expire()
         pullTimer?.invalidate()
         pull()
         pullTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
@@ -850,15 +851,22 @@ final class DaysIndex: ObservableObject {
     }
 
     private func pull() {
+        Task {
+            await pullNow()
+        }
+    }
+
+    func pullNow() async {
         guard !fixtures, driveAuth.isSignedIn else {
             return
         }
         pulls += 1
-        Task {
+        do {
             guard let folder = try? await indexFolderId() else {
                 return
             }
             await pullExtras(folder: folder)
+            await DaysRecaps.shared.refresh(download: DaysNet.shared.isOnline)
             generatePhoneThumbs()
             resolveDurations()
             generatePhoneSprite()
@@ -886,6 +894,9 @@ final class DaysIndex: ObservableObject {
             do {
                 let data = try await api.downloadMedia(fileId: fileId)
                 if let loaded = DaysRawIndex(data: data) {
+                    if loaded.updatedMs != mac?.updatedMs {
+                        DaysRecaps.shared.expire()
+                    }
                     mac = loaded
                     rebuild()
                 }

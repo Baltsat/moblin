@@ -1259,6 +1259,7 @@ final class DriveUploader: @unchecked Sendable {
             daysLog("app didEnterBackground")
             continuation.yield(.background(true))
             DaysBackgroundSync.schedule()
+            DaysBackgroundSync.scheduleRefresh()
         }
         NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification,
                                                object: nil,

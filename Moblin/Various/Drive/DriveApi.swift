@@ -253,6 +253,19 @@ final class DriveApi: Sendable {
         }
     }
 
+    func search(_ query: String, fields: String) async throws -> [[String: Any]] {
+        var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")!
+        components.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "fields", value: "files(\(fields))"),
+            URLQueryItem(name: "pageSize", value: "100"),
+            URLQueryItem(name: "orderBy", value: "modifiedTime desc"),
+        ]
+        let (response, data) = try await send(URLRequest(url: components.url!), body: nil)
+        try check(response, data, ok: [200])
+        return (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["files"] as? [[String: Any]] ?? []
+    }
+
     func findAnywhere(name: String) async throws -> (id: String, size: Int64)? {
         var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")!
         components.queryItems = [

@@ -5,6 +5,7 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.baltsat.moblin-dais.sync</string>
+		<string>com.baltsat.moblin-dais.refresh</string>
 	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>

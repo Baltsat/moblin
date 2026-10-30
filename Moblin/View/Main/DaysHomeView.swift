@@ -794,16 +794,12 @@ private struct DaysLiveStrip: View {
 
 private struct DaysRecapButton: View {
     let season: Int
-    @State private var file: URL?
+    @ObservedObject private var recaps = DaysRecaps.shared
     @State private var player: AVPlayer?
-
-    private var local: URL {
-        URL.applicationSupportDirectory.appending(path: "recap-S\(season).mp4")
-    }
 
     var body: some View {
         Group {
-            if let file {
+            if let file = recaps.recaps[season] {
                 Button {
                     player = AVPlayer(url: file)
                     player?.play()
@@ -818,7 +814,6 @@ private struct DaysRecapButton: View {
                 .buttonStyle(.plain)
             }
         }
-        .task { await load() }
         .fullScreenCover(isPresented: Binding(get: { player != nil }, set: { if !$0 { player?.pause(); player = nil } })) {
             ZStack(alignment: .topLeading) {
                 Color.black.ignoresSafeArea()
@@ -837,24 +832,5 @@ private struct DaysRecapButton: View {
                 .padding(.leading, 8)
             }
         }
-    }
-
-    private func load() async {
-        if FileManager.default.fileExists(atPath: local.path) {
-            file = local
-            return
-        }
-        let api = DriveApi()
-        guard let found = try? await api.findAnywhere(name: "recap-S\(season).mp4"),
-              let data = try? await api.downloadMedia(fileId: found.id)
-        else {
-            return
-        }
-        try? FileManager.default.createDirectory(at: local.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard (try? data.write(to: local, options: .atomic)) != nil else {
-            return
-        }
-        daysLog("recap S\(season) cached \(data.count) bytes")
-        file = local
     }
 }
