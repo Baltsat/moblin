@@ -193,7 +193,7 @@ struct DaysPrompterOverlay: View {
     }
 
     private var boxHeight: CGFloat {
-        min(max(screen.height * 0.3, 150), 320)
+        min(max(screen.height * 0.3, 130), 320)
     }
 
     private var readLine: CGFloat {
@@ -245,7 +245,7 @@ struct DaysPrompterOverlay: View {
         .frame(width: boxWidth, height: boxHeight, alignment: .top)
         .clipped()
         .mask(LinearGradient(stops: [.init(color: .clear, location: 0),
-                                     .init(color: .black, location: 0.08),
+                                     .init(color: .black, location: 0.14),
                                      .init(color: .black, location: 0.78),
                                      .init(color: .clear, location: 1)],
                              startPoint: .top, endPoint: .bottom))
@@ -345,7 +345,7 @@ struct DaysPrompterOverlay: View {
             box
                 .offset(clamp(CGSize(width: base.width + moving.width, height: base.height + moving.height)))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .padding(.top, 76)
+                .padding(.top, 100)
                 .sheet(isPresented: $showEditor) {
                     DaysPrompterEditor()
                 }

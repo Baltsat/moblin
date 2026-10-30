@@ -14,9 +14,6 @@ import SwiftUI
     if text.contains("waiting for network") {
         return "Waiting for Wi-Fi"
     }
-    if DaysPace.live {
-        return "Slower while recording"
-    }
     if text.contains("failed") || text.contains("lost") {
         return "Retrying"
     }
