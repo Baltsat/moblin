@@ -558,8 +558,32 @@ final class DaysDim: ObservableObject {
     private var lastTouch = Date()
     private var savedBrightness: CGFloat?
 
+    private var statusCover: UIWindow?
+    var touching = false
+
     func touch() {
         lastTouch = Date()
+    }
+
+    private func coverStatusBar(_ on: Bool) {
+        guard on else {
+            statusCover?.isHidden = true
+            statusCover = nil
+            return
+        }
+        guard let scene = UIApplication.shared.connectedScenes.first(where: {
+            $0.activationState == .foregroundActive
+        }) as? UIWindowScene else {
+            return
+        }
+        let window = UIWindow(windowScene: scene)
+        window.windowLevel = .statusBar + 1
+        window.backgroundColor = .black
+        window.isUserInteractionEnabled = false
+        let height = max(scene.statusBarManager?.statusBarFrame.height ?? 0, scene.windows.first?.safeAreaInsets.top ?? 0)
+        window.frame = CGRect(x: 0, y: 0, width: scene.screen.bounds.width, height: height)
+        window.isHidden = false
+        statusCover = window
     }
 
     func tick(active: Bool) {
@@ -567,12 +591,13 @@ final class DaysDim: ObservableObject {
             if dimmed {
                 wake()
             }
-        } else if !dimmed, DaysPrefs.dimSeconds > 0,
+        } else if !dimmed, !touching || Date().timeIntervalSince(lastTouch) > 30, DaysPrefs.dimSeconds > 0,
                   Date().timeIntervalSince(lastTouch) > Double(DaysPrefs.dimSeconds)
         {
             savedBrightness = UIScreen.main.brightness
             UIScreen.main.brightness = 0.02
             dimmed = true
+            coverStatusBar(true)
         }
     }
 
@@ -581,6 +606,7 @@ final class DaysDim: ObservableObject {
             UIScreen.main.brightness = savedBrightness
         }
         savedBrightness = nil
+        coverStatusBar(false)
         dimmed = false
         lastTouch = Date()
     }
@@ -590,9 +616,31 @@ final class DaysDim: ObservableObject {
 let daysDim = DaysDim()
 
 private final class DaysTouchObserver: UIGestureRecognizer {
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-        MainActor.assumeIsolated { daysDim.touch() }
-        state = .failed
+    private func seen(_ event: UIEvent) {
+        let active = event.allTouches?.contains { $0.phase != .ended && $0.phase != .cancelled } ?? false
+        MainActor.assumeIsolated {
+            daysDim.touch()
+            daysDim.touching = active
+        }
+        if !active {
+            state = .failed
+        }
+    }
+
+    override func touchesBegan(_: Set<UITouch>, with event: UIEvent) {
+        seen(event)
+    }
+
+    override func touchesMoved(_: Set<UITouch>, with event: UIEvent) {
+        seen(event)
+    }
+
+    override func touchesEnded(_: Set<UITouch>, with event: UIEvent) {
+        seen(event)
+    }
+
+    override func touchesCancelled(_: Set<UITouch>, with event: UIEvent) {
+        seen(event)
     }
 }
 
