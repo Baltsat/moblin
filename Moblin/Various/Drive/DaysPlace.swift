@@ -75,7 +75,10 @@ final class DaysPlace: NSObject, CLLocationManagerDelegate {
         }
         geocoder.reverseGeocodeLocation(location) { placemarks, _ in
             let mark = placemarks?.first
-            let name = mark?.areasOfInterest?.first ?? mark?.name ?? mark?.subLocality ?? mark?.locality
+            let area = mark?.areasOfInterest?.first { area in
+                !area.hasPrefix("Pulau") && !area.contains("Island") && area != mark?.administrativeArea
+            }
+            let name = area ?? mark?.name ?? mark?.subLocality ?? mark?.locality
             Task { @MainActor in
                 guard let name else {
                     return
