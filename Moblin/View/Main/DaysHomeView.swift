@@ -78,6 +78,9 @@ struct DaysHomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     topBar
+                    if let life = index.mac?.life {
+                        DaysMainCharView(life: life)
+                    }
                     if index.recordingNow {
                         DaysLiveStrip(index: index, isRecording: model.isRecording)
                     }

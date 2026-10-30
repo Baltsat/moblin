@@ -16,6 +16,7 @@ earlier title is similar (Jazz X2, My Second Stand-Up, not so lazy day after par
 mock-epic for turning points (Monk Mode start). A hard or dull stretch stays short and flat (Tiring). No motivational lines,
 no therapy words, no names of people, health, sex or money. Never mention Claude, Days, Terminal or the recording.
 Use the weekday shape at most once per day: if an earlier title today already names the weekday, pick another shape.
+Use "Again" or a sequel joke only when this episode clearly repeats one specific earlier activity, never twice in one title and never if one of the last 3 titles already uses it. Base the title on the whole episode (all frames and the screen log), not on its first minutes.
 Reply with the title only.
 """
 
@@ -74,7 +75,7 @@ func daysAskTitle(startMs: Int64, endMs: Int64, tz: TimeZone, prev: [String], sp
     }
     content.append(["type": "text", "text": prompt])
     let body: [String: Any] = [
-        "model": "claude-haiku-5-5",
+        "model": "claude-sonnet-5-5",
         "max_tokens": 2000,
         "output_config": ["effort": "low"],
         "messages": [["role": "user", "content": content]],

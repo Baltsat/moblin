@@ -481,6 +481,8 @@ struct DaysOverlayView: View {
         .onChange(of: isRecording) { recording in
             if recording {
                 prompter.takeStarted()
+            } else {
+                prompter.takeStopped()
             }
         }
         .fullScreenCover(isPresented: $showHome) {

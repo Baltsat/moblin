@@ -86,8 +86,33 @@ struct DaysRawLive {
     var angles: [DaysLiveAngle]
 }
 
+struct DaysLifeDay: Decodable, Equatable {
+    let d: String
+    let rec: Int
+    let awake: Int
+    let pct: Double
+}
+
+struct DaysAchievement: Decodable, Equatable {
+    let id: String
+    let t: String
+    let sub: String
+}
+
+struct DaysLife: Decodable, Equatable {
+    let days: [DaysLifeDay]
+    let streak: Int
+    let best: Double
+    let today: Double
+    let avg7: Double
+    let prev7: Double
+    let total_h: Int
+    let ach: [DaysAchievement]
+}
+
 struct DaysRawIndex {
     var device: String
+    var life: DaysLife?
     var tz: String
     var updatedMs: Int64
     var live: DaysRawLive?
@@ -108,6 +133,8 @@ struct DaysRawIndex {
         }
         device = root["device"] as? String ?? ""
         titles = root["titles"] as? [String: String] ?? [:]
+        life = root["life"].flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+            .flatMap { try? JSONDecoder().decode(DaysLife.self, from: $0) }
         tz = root["tz"] as? String ?? TimeZone.current.identifier
         updatedMs = (root["updated_ms"] as? NSNumber)?.int64Value ?? 0
         if let live = root["live"] as? [String: Any] {
@@ -877,7 +904,7 @@ final class DaysIndex: ObservableObject {
             defer { titling = false }
             var jpeg: Data?
             if let id = sprite?.id {
-                _ = await DaysSprites.shared.sheet(id)
+                _ = await DaysSprites.shared.sheet(id, refresh: true)
                 jpeg = DaysSprites.shared.cacheDirectory.flatMap { try? Data(contentsOf: $0.appendingPathComponent("\(id).jpg")) }
             }
             do {

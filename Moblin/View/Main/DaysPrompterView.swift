@@ -71,6 +71,7 @@ final class DaysPrompter: ObservableObject {
     }
 
     @Published var tune = false
+    @Published private(set) var generation = 0
     @Published private(set) var playing = false
     @Published private(set) var countdown: Int?
     private var anchorOffset: CGFloat = 0
@@ -159,7 +160,19 @@ final class DaysPrompter: ObservableObject {
 
     func reset() {
         pause()
-        anchorOffset = 0
+        guard anchorOffset != 0 else {
+            return
+        }
+        withAnimation(.easeInOut(duration: 0.35)) {
+            anchorOffset = 0
+            generation += 1
+        }
+    }
+
+    func takeStopped() {
+        if running {
+            pause()
+        }
     }
 
     func close() {
@@ -257,7 +270,7 @@ struct DaysPrompterOverlay: View {
     }
 
     private var readLine: CGFloat {
-        size.height * 0.34
+        size.height * 0.55
     }
 
     private func current(_ offset: CGFloat) -> Int {
@@ -265,7 +278,33 @@ struct DaysPrompterOverlay: View {
         return frames.sorted { $0.key < $1.key }.last(where: { $0.value.lowerBound <= line })?.key ?? 0
     }
 
+    private func band(_ edges: Bool) -> some View {
+        LinearGradient(stops: [.init(color: edges ? .black : .clear, location: 0),
+                               .init(color: edges ? .clear : .black, location: 0.22),
+                               .init(color: edges ? .clear : .black, location: 0.84),
+                               .init(color: edges ? .black : .clear, location: 1)],
+                       startPoint: .top, endPoint: .bottom)
+    }
+
     private var text: some View {
+        ZStack(alignment: .top) {
+            column.blur(radius: 4).mask(band(true))
+            column.mask(band(false))
+        }
+        .onPreferenceChange(DaysParagraphFrames.self) { value in
+            frames = value
+            prompter.maxOffset = max((value.values.map(\.upperBound).max() ?? 0) - readLine, 0)
+        }
+        .frame(width: size.width, height: size.height, alignment: .top)
+        .clipped()
+        .mask(LinearGradient(stops: [.init(color: .clear, location: 0.02),
+                                     .init(color: .black, location: 0.22),
+                                     .init(color: .black, location: 0.8),
+                                     .init(color: .clear, location: 0.98)],
+                             startPoint: .top, endPoint: .bottom))
+    }
+
+    private var column: some View {
         TimelineView(.animation(paused: !prompter.playing)) { context in
             let offset = prompter.offset(at: context.date)
             let active = current(offset)
@@ -289,7 +328,7 @@ struct DaysPrompterOverlay: View {
                         .foregroundStyle(.white.opacity(0.45))
                 }
             }
-            .animation(.easeOut(duration: 0.25), value: active)
+            .animation(.easeInOut(duration: 0.22), value: active)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.leading, 18)
             .padding(.trailing, 40)
@@ -302,17 +341,7 @@ struct DaysPrompterOverlay: View {
                 }
             }
         }
-        .onPreferenceChange(DaysParagraphFrames.self) { value in
-            frames = value
-            prompter.maxOffset = max((value.values.map(\.upperBound).max() ?? 0) - readLine, 0)
-        }
         .frame(width: size.width, height: size.height, alignment: .top)
-        .clipped()
-        .mask(LinearGradient(stops: [.init(color: .clear, location: 0.04),
-                                     .init(color: .black, location: 0.2),
-                                     .init(color: .black, location: 0.68),
-                                     .init(color: .clear, location: 0.84)],
-                             startPoint: .top, endPoint: .bottom))
     }
 
     private var corner: some View {
@@ -336,6 +365,8 @@ struct DaysPrompterOverlay: View {
     private var card: some View {
         ZStack(alignment: .top) {
             text
+                .id(prompter.generation)
+                .transition(.opacity)
             if let countdown = prompter.countdown {
                 Text("\(countdown)")
                     .font(.system(size: 72, weight: .bold))
