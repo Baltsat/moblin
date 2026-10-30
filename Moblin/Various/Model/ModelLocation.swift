@@ -13,7 +13,9 @@ extension Model {
 
     func reloadLocation() {
         locationManager.stop()
-        if isLocationEnabled() {
+        if !database.location.enabled, stream.recording.uploadToDrive {
+            locationManager.startCoarse(onUpdate: handleLocationUpdate)
+        } else if isLocationEnabled() {
             let configured = database.location.enabled
             locationManager.start(accuracy: configured ? database.location.desiredAccuracy : .nearestTenMeters,
                                   distanceFilter: configured ? database.location.distanceFilter : .tenMeters,
@@ -163,6 +165,10 @@ extension Model {
     }
 
     private func handleLocationUpdate(location: CLLocation) {
+        guard database.location.enabled else {
+            DaysPlace.shared.moved(location)
+            return
+        }
         driveRecordLocation(location: location)
         guard isLive else {
             return

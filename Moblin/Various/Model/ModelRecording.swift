@@ -26,6 +26,7 @@ extension Model {
             return
         }
         macrosEventOccurred(MacroEvent(event: .startRecording))
+        DaysPlace.shared.takeStarted()
         if DaysPrefs.bool(DaysPrefs.torchDefault, false), !streamOverlay.isTorchOn {
             setTorch(on: true)
         }
@@ -37,6 +38,7 @@ extension Model {
             return
         }
         macrosEventOccurred(MacroEvent(event: .stopRecording))
+        DaysPlace.shared.takeStopped()
         setIsRecording(value: false)
         stopDriveSession()
         stopYouTubeIfStreaming()

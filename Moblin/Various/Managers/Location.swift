@@ -67,6 +67,16 @@ class Location: NSObject, ObservableObject {
         backgroundActivity.start()
     }
 
+    func startCoarse(onUpdate: @escaping (CLLocation) -> Void) {
+        self.onUpdate = onUpdate
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+        manager.distanceFilter = 500
+        manager.requestWhenInUseAuthorization()
+        manager.startUpdatingLocation()
+        backgroundActivity.start()
+    }
+
     func stop() {
         logger.debug("location: Stop")
         onUpdate = nil
