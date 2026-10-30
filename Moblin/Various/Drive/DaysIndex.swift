@@ -86,6 +86,13 @@ struct DaysRawLive {
     var angles: [DaysLiveAngle]
 }
 
+private let daysYouTubeMapKey = "daysYouTubeVodMap"
+
+func daysVodId(_ map: [String: String], session: String, angle: String) -> String? {
+    let stream = angle == "face" ? "webcam" : angle
+    return map[session.hasSuffix("_\(stream)") ? session : "\(session)_\(stream)"]
+}
+
 struct DaysLifeDay: Decodable, Equatable {
     let d: String
     let rec: Int
@@ -352,6 +359,7 @@ final class DaysIndex: ObservableObject {
     private var wasRecording = false
     private var resolving = false
     private var thumbsMap: [String: [String]] = [:]
+    private var youTubeMap = UserDefaults.standard.dictionary(forKey: daysYouTubeMapKey) as? [String: String] ?? [:]
     private var seeded = false
     private var generating = false
     private var titling = false
@@ -427,6 +435,11 @@ final class DaysIndex: ObservableObject {
             let base = URL(fileURLWithPath: dir)
             DaysThumbs.shared.localDir = base.appendingPathComponent("thumbs")
             DaysSprites.shared.localDir = base.appendingPathComponent("sprites")
+            if let data = try? Data(contentsOf: base.appendingPathComponent("youtube.json")),
+               let map = try? JSONSerialization.jsonObject(with: data) as? [String: String]
+            {
+                youTubeMap = map
+            }
             if let data = try? Data(contentsOf: base.appendingPathComponent("mac.json")) {
                 mac = DaysRawIndex(data: data)
             }
@@ -672,6 +685,11 @@ final class DaysIndex: ObservableObject {
                     continue
                 }
                 var scene = scene
+                for index in scene.angles.indices {
+                    if let id = daysVodId(youTubeMap, session: scene.session, angle: scene.angles[index].angle) {
+                        scene.angles[index].youtube = id
+                    }
+                }
                 for index in scene.angles.indices where scene.angles[index].thumbs.isEmpty {
                     if let id = scene.angles[index].driveId, let ids = thumbsMap[id] {
                         scene.angles[index].thumbs = ids
@@ -935,6 +953,15 @@ final class DaysIndex: ObservableObject {
             if let own, let data = try? await api.downloadMedia(fileId: own), let remote = DaysRawIndex(data: data) {
                 seedHistory(remote)
             }
+        }
+        if let id = try? await api.findFile(name: "youtube.json", folderId: folder),
+           let data = try? await api.downloadMedia(fileId: id),
+           let map = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+           map != youTubeMap
+        {
+            youTubeMap = map
+            UserDefaults.standard.set(map, forKey: daysYouTubeMapKey)
+            rebuild()
         }
         guard pulls % 10 == 1 else {
             return
