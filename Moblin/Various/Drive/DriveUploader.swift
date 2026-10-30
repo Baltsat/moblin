@@ -782,7 +782,8 @@ private actor DriveEngine {
             daysLog("chunk result \(result)")
             _ = try await apply(result, to: session)
             if paced {
-                setStatus("Google Drive: recording, uploading slowly")
+                setStatus(DaysGovernor.charging ? "Google Drive: uploading while charging"
+                    : "Google Drive: recording, uploading slowly")
                 await DaysPace.space(bytes: chunk.count, since: started)
             }
             return true

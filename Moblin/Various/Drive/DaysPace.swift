@@ -2,7 +2,9 @@ import Foundation
 
 final class DaysPace: @unchecked Sendable {
     static let shared = DaysPace()
-    static let chunkBytes = 1 << 20
+    static var chunkBytes: Int {
+        DaysGovernor.charging ? 8 << 20 : 1 << 20
+    }
 
     private let lock = NSLock()
     private var streaming = false
@@ -45,6 +47,7 @@ final class DaysPace: @unchecked Sendable {
     }
 
     static func space(bytes: Int, since start: Date) async {
+        DaysGovernor.noteSent(bytes)
         await sleep(seconds: Double(bytes) / max(DaysGovernor.bytesPerSecond, DaysGovernor.minRate) - Date().timeIntervalSince(start))
     }
 

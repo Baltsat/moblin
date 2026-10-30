@@ -39,6 +39,7 @@ final class DaysNet: @unchecked Sendable {
     static let shared = DaysNet()
     private let lock = NSLock()
     private var kind = DaysNetKind.offline
+    private var metered = false
     private var observers: [@Sendable () -> Void] = []
     private let monitor = NWPathMonitor()
 
@@ -57,6 +58,7 @@ final class DaysNet: @unchecked Sendable {
             daysLog("net kind=\(kind) wifi=\(path.usesInterfaceType(.wifi)) cell=\(path.usesInterfaceType(.cellular)) expensive=\(path.isExpensive) constrained=\(path.isConstrained) status=\(path.status) avail=\(path.availableInterfaces.map { "\($0.type)" })")
             let observers = self.lock.withLock {
                 self.kind = kind
+                self.metered = path.isConstrained || path.isExpensive
                 return self.observers
             }
             for observer in observers {
@@ -68,6 +70,10 @@ final class DaysNet: @unchecked Sendable {
 
     var current: DaysNetKind {
         lock.withLock { kind }
+    }
+
+    var unmeteredWifi: Bool {
+        lock.withLock { kind == .wifi && !metered }
     }
 
     var isOnline: Bool {

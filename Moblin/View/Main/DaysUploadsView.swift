@@ -82,7 +82,7 @@ struct DaysUploadsView: View {
                         Text(left > 0 ? daysSize(left) : "Recording")
                             .font(.system(size: 40, weight: .semibold))
                             .tracking(-1.2)
-                        Text(verbatim: "\(left > 0 ? "\u{2191} left" : "\u{25CF} Safe after Cut")\(eta.map { " \u{00B7} \($0)" } ?? "")\(reason.map { " \u{00B7} \($0)" } ?? "")")
+                        Text(verbatim: "\(left > 0 ? "\u{2191} left" : "\u{25CF} Safe after Cut")\(eta.map { " \u{00B7} \($0)" } ?? "")\(reason.map { " \u{00B7} \($0)" } ?? "")\(DaysPace.live && DaysGovernor.charging ? " \u{00B7} Uploading while charging" : "")")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(left > 0 ? DaysUI.amber : DaysUI.red)
                     }

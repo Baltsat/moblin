@@ -2591,6 +2591,7 @@ final class Model: NSObject, ObservableObject {
 
     private func updateBatteryState() {
         let state = UIDevice.current.batteryState
+        DaysGovernor.setPowered(state == .charging || state == .full)
         if state != battery.state {
             battery.state = state
             remoteControlStateChanged(state: .init(batteryCharging: isBatteryCharging()))

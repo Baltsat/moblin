@@ -236,7 +236,11 @@ final class Recorder: NSObject, @unchecked Sendable {
                                          _ sampleBuffer: CMSampleBuffer) -> Bool
     {
         do {
-            return try input.append(sampleBuffer)
+            let appended = try input.append(sampleBuffer)
+            if !appended {
+                DaysGovernor.noteDroppedFrame()
+            }
+            return appended
         } catch {
             logger.info("""
             recorder: audio: Append failed with \(writer.error?.localizedDescription ?? "") \
@@ -263,7 +267,9 @@ final class Recorder: NSObject, @unchecked Sendable {
             return
         }
         do {
-            _ = try input.append(sampleBuffer)
+            if try !input.append(sampleBuffer) {
+                DaysGovernor.noteDroppedFrame()
+            }
         } catch {
             logger.info("""
             recorder: video: Append failed with \(writer.error?.localizedDescription ?? "") \
