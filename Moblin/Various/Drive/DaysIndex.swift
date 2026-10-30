@@ -71,6 +71,38 @@ struct DaysAngle: Equatable {
     }
 }
 
+struct DaysPlaceTag: Equatable {
+    var name: String
+    var lat: Double
+    var lon: Double
+
+    init(name: String, lat: Double, lon: Double) {
+        self.name = name
+        self.lat = lat
+        self.lon = lon
+    }
+
+    init?(_ dict: Any?) {
+        guard let dict = dict as? [String: Any], let name = dict["name"] as? String,
+              let lat = (dict["lat"] as? NSNumber)?.doubleValue, let lon = (dict["lon"] as? NSNumber)?.doubleValue
+        else {
+            return nil
+        }
+        self.init(name: name, lat: lat, lon: lon)
+    }
+
+    var dict: [String: Any] {
+        ["name": name, "lat": lat, "lon": lon]
+    }
+}
+
+let daysPlacesKey = "daysPlaces"
+
+func daysStoredPlaces() -> [String: [DaysPlaceTag]] {
+    (UserDefaults.standard.dictionary(forKey: daysPlacesKey) as? [String: [[String: Any]]] ?? [:])
+        .mapValues { $0.compactMap(DaysPlaceTag.init) }
+}
+
 struct DaysRawScene {
     var session: String
     var startMs: Int64
@@ -78,6 +110,7 @@ struct DaysRawScene {
     var failed: Bool
     var angles: [DaysAngle]
     var endEst = false
+    var places: [DaysPlaceTag] = []
 }
 
 struct DaysRawLive {
@@ -173,7 +206,9 @@ struct DaysRawIndex {
                               thumbs: $0["thumbs"] as? [String] ?? [],
                               sprite: ($0["sprite"] as? [String: Any]).flatMap { DaysSprite($0) })
                 },
-                endEst: scene["end_est"] as? Bool ?? false
+                endEst: scene["end_est"] as? Bool ?? false,
+                places: (scene["places"] as? [Any])?.compactMap(DaysPlaceTag.init)
+                    ?? DaysPlaceTag(scene["place"]).map { [$0] } ?? []
             )
         }
     }
@@ -223,6 +258,12 @@ struct DaysRawIndex {
             ]
             if scene.endEst {
                 out["end_est"] = true
+            }
+            if let place = scene.places.first {
+                out["place"] = place.dict
+            }
+            if scene.places.count > 1 {
+                out["places"] = scene.places.map(\.dict)
             }
             return out
         }
@@ -524,6 +565,7 @@ final class DaysIndex: ObservableObject {
         let phoneSprites = (UserDefaults.standard.dictionary(forKey: daysIndexSpritesKey) as? [String: [String: Any]] ?? [:])
             .compactMapValues { DaysSprite($0) }
         let durations = UserDefaults.standard.dictionary(forKey: daysIndexDurationsKey) as? [String: Double] ?? [:]
+        let places = daysStoredPlaces()
         func resolved(_ session: String, _ start: Int64, _ bytes: Int64) -> (Int64, Bool) {
             if let end = ends[session] {
                 return (end, false)
@@ -553,7 +595,8 @@ final class DaysIndex: ObservableObject {
                                    uploaded: uploaded,
                                    thumbs: phoneThumbs[item.name] ?? [],
                                    sprite: phoneSprites[item.name])],
-                endEst: !isLive && estimate.1
+                endEst: !isLive && estimate.1,
+                places: places[item.name] ?? []
             ))
             if isLive {
                 live = DaysRawLive(session: item.name,
@@ -941,7 +984,9 @@ final class DaysIndex: ObservableObject {
                 jpeg = DaysSprites.shared.cacheDirectory.flatMap { try? Data(contentsOf: $0.appendingPathComponent("\(id).jpg")) }
             }
             do {
-                let title = try await daysAskTitle(startMs: candidate.startMs, endMs: end, tz: tz, prev: prev, sprite: jpeg)
+                let place = candidate.sessions.lazy.compactMap { daysStoredPlaces()[$0]?.first?.name }.first
+                let title = try await daysAskTitle(startMs: candidate.startMs, endMs: end, tz: tz, prev: prev, sprite: jpeg,
+                                                   place: place)
                 var stored = UserDefaults.standard.dictionary(forKey: daysPhoneTitlesKey) as? [String: String] ?? [:]
                 for session in candidate.sessions {
                     stored[session] = title

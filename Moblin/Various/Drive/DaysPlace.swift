@@ -10,6 +10,7 @@ final class DaysPlace: NSObject, CLLocationManagerDelegate {
     private var lastFix: Date?
     private var lastCell: String?
     private var recording = false
+    private var takeStartMs: Int64 = 0
     private let cacheKey = "daysPlaceNames"
 
     override init() {
@@ -20,6 +21,7 @@ final class DaysPlace: NSObject, CLLocationManagerDelegate {
 
     func takeStarted() {
         recording = true
+        takeStartMs = Int64(Date().timeIntervalSince1970 * 1000)
         lastFix = nil
         lastCell = nil
         manager.requestLocation()
@@ -99,6 +101,17 @@ final class DaysPlace: NSObject, CLLocationManagerDelegate {
             "acc": Int(location.horizontalAccuracy),
             "fix_ms": Int64(location.timestamp.timeIntervalSince1970 * 1000),
         ]
+        if let item = daysQueue.items.first, item.startMs > takeStartMs - 120_000 {
+            let session = item.name
+            var stored = UserDefaults.standard.dictionary(forKey: daysPlacesKey) as? [String: [[String: Any]]] ?? [:]
+            var list = stored[session] ?? []
+            if list.last?["name"] as? String != name {
+                list.append(["name": name, "lat": values["lat"]!, "lon": values["lon"]!])
+                stored[session] = list
+                UserDefaults.standard.set(stored, forKey: daysPlacesKey)
+                DaysIndex.shared.refreshAndPush()
+            }
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: values) else {
             return
         }

@@ -5,7 +5,7 @@ private let daysTitleCap = 30
 
 private let daysTitlePrompt = """
 You name one episode of the TV series "My Life", one person's video diary. Match HIS own naming style.
-Episode: {day} {part}, {when} ({dur}). Recorded by: iPhone camera.
+Episode: {day} {part}, {when} ({dur}). Recorded by: iPhone camera. Place: {place}.
 Earlier episode titles (newest last): {prev}
 The attached image is a contact sheet of this episode (left to right, top to bottom, in time order). Look where he is and what he does.
 
@@ -17,6 +17,7 @@ mock-epic for turning points (Monk Mode start). A hard or dull stretch stays sho
 no therapy words, no names of people, health, sex or money. Never mention Claude, Days, Terminal or the recording.
 Use the weekday shape at most once per day: if an earlier title today already names the weekday, pick another shape.
 Use "Again" or a sequel joke only when this episode clearly repeats one specific earlier activity, never twice in one title and never if one of the last 3 titles already uses it. Base the title on the whole episode (all frames and the screen log), not on its first minutes.
+When the place is known and the episode happened out somewhere (not just at home), prefer the "<Event> @<Place>" shape with that place name.
 Reply with the title only.
 """
 
@@ -46,7 +47,8 @@ private func daysTitleFuse() throws {
     UserDefaults.standard.set(["day": day, "n": used + 1], forKey: daysTitleFuseKey)
 }
 
-func daysAskTitle(startMs: Int64, endMs: Int64, tz: TimeZone, prev: [String], sprite: Data?) async throws -> String {
+func daysAskTitle(startMs: Int64, endMs: Int64, tz: TimeZone, prev: [String], sprite: Data?,
+                  place: String?) async throws -> String {
     guard let secrets = DaysTitleSecrets.shared else {
         throw DaysTitleError.http(0)
     }
@@ -68,6 +70,7 @@ func daysAskTitle(startMs: Int64, endMs: Int64, tz: TimeZone, prev: [String], sp
         .replacingOccurrences(of: "{when}", with: "\(clock.string(from: start))–\(clock.string(from: end))")
         .replacingOccurrences(of: "{dur}", with: mins >= 60 ? "\(mins / 60) h \(mins % 60) min" : "\(mins) min")
         .replacingOccurrences(of: "{prev}", with: prev.isEmpty ? "(none yet)" : prev.joined(separator: ", "))
+        .replacingOccurrences(of: "{place}", with: place ?? "unknown")
     var content: [[String: Any]] = []
     if let sprite {
         content.append(["type": "image",
