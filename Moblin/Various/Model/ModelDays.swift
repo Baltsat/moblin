@@ -51,6 +51,7 @@ extension Model {
         applyDaysBitrateMigration()
         applyDaysFocusMigration()
         daysObserveSubjectArea()
+        daysObserveLifecycle()
         daysPickStereoMic()
         applyDaysPendingPreset()
         daysAutoPreset()
@@ -146,20 +147,24 @@ extension Model {
         }
         let chosen = DaysPreset.current
         var target = chosen
+        var reason: String?
         if chosen == .auto {
             let heat = statusOther.thermalState
             let free = (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
                 .volumeAvailableCapacityForImportantUsage ?? Int64.max
             if heat == .critical || free < 20_000_000_000 {
                 target = .allDay
+                reason = heat == .critical ? "hot" : "low storage"
             } else if heat == .serious || free < 50_000_000_000 {
                 target = .smooth
+                reason = heat == .serious ? "hot" : "low storage"
             } else if daysCameraHas4K() {
                 target = .max
             } else {
                 target = .smooth
             }
         }
+        DaysQuality.shared.reason = reason
         guard DaysQuality.shared.applied != target else {
             return
         }
@@ -205,12 +210,16 @@ final class DaysQuality: ObservableObject {
     static let shared = DaysQuality()
     @Published var chosen = DaysPreset.current
     @Published var applied: DaysPreset?
+    @Published var reason: String?
 
     var label: String {
         guard let applied else {
             return chosen.short
         }
-        return chosen == .auto ? "Auto · \(applied.short)" : applied.short
+        guard chosen == .auto else {
+            return applied.short
+        }
+        return "Auto · \(applied.short)\(reason.map { " (\($0))" } ?? "")"
     }
 }
 
@@ -375,6 +384,20 @@ extension Model {
 }
 
 extension Model {
+    func daysObserveLifecycle() {
+        let events: [(Notification.Name, String)] = [
+            (UIApplication.protectedDataWillBecomeUnavailableNotification, "locked"),
+            (UIApplication.protectedDataDidBecomeAvailableNotification, "unlocked"),
+            (UIApplication.didEnterBackgroundNotification, "background"),
+            (UIApplication.didBecomeActiveNotification, "active"),
+        ]
+        for (name, detail) in events {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                driveUploader.event(type: "app", detail: detail)
+            }
+        }
+    }
+
     func daysObserveSubjectArea() {
         NotificationCenter.default.addObserver(
             forName: AVCaptureDevice.subjectAreaDidChangeNotification,
