@@ -19,17 +19,12 @@ private var daysFakeRecording: Bool {
 }
 
 @MainActor private func daysUploadText(_ drive: DriveStatus) -> String? {
-    if let reason = daysUploadReason(drive: drive) {
-        return reason
+    guard let reason = daysUploadReason(drive: drive),
+          reason == "Sign in to Google" || reason == "Drive storage is full"
+    else {
+        return nil
     }
-    let text = drive.text.lowercased()
-    if text.contains("queued") {
-        if let percent = drive.percent {
-            return "\u{2191} \(percent)%"
-        }
-        return "\u{2191} Uploading"
-    }
-    return nil
+    return reason
 }
 
 private struct DaysGlass: ViewModifier {
@@ -137,6 +132,12 @@ struct DaysStatusPill: View {
     }
 
     var body: some View {
+        if isLive || daysFakeRecording || daysUploadText(drive) != nil || lowBattery || hot {
+            pill
+        }
+    }
+
+    private var pill: some View {
         HStack(spacing: 8) {
             if isLive || daysFakeRecording {
                 Text("LIVE")
@@ -146,9 +147,11 @@ struct DaysStatusPill: View {
                     .padding(.vertical, 2)
                     .background(DaysUI.red, in: RoundedRectangle(cornerRadius: 6))
             }
-            Text(daysUploadReason(drive: drive).map { "\u{2191} \($0)" } ?? "\u{2191} after Cut")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
+            if let text = daysUploadText(drive) {
+                Text(text)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(DaysUI.amber)
+            }
             if lowBattery {
                 Image(systemName: "battery.25").foregroundStyle(DaysUI.amber)
                 Text("\(Int(battery.level * 100))%").font(.system(size: 12)).monospacedDigit()

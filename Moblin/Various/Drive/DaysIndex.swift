@@ -311,7 +311,7 @@ struct DaysSeason: Identifiable {
 }
 
 struct DaysVerdict {
-    enum Tone { case red, amber, green }
+    enum Tone { case red, amber, green, quiet }
 
     var text: String
     var tone: Tone
@@ -321,6 +321,7 @@ struct DaysVerdict {
         case .red: DaysUI.red
         case .amber: DaysUI.amber
         case .green: DaysUI.green
+        case .quiet: DaysUI.muted
         }
     }
 }
@@ -351,6 +352,7 @@ final class DaysIndex: ObservableObject {
     private var recordingStartMs: Int64 = 0
     private var rate = 0.0
     private var lastLeft: (bytes: Int64, at: Date)?
+    private var progressAt = Date()
     private var fixtures = false
     private var thumbTimer: Timer?
     private var frameTimer: Timer?
@@ -808,6 +810,9 @@ final class DaysIndex: ObservableObject {
         if left == 0 {
             rate = 0
         }
+        if left == 0 || recordingNow || left < (lastLeft?.bytes ?? left) {
+            progressAt = now
+        }
         lastLeft = (left, now)
     }
 
@@ -816,16 +821,15 @@ final class DaysIndex: ObservableObject {
             return DaysVerdict(text: "\u{25CF} Recording", tone: .red)
         }
         let left = episode.id == today.id ? totalLeft : episode.leftBytes
-        if left > 0 {
-            var text = "\u{2191} \(daysSize(left)) left"
-            if episode.id == today.id, let eta = leftEta {
-                text += " \u{00B7} \(eta)"
-            }
-            return DaysVerdict(text: text, tone: .amber)
-        }
         if episode.failed > 0 {
             return DaysVerdict(text: "\u{26A0} \(episode.failed) failed start\(episode.failed == 1 ? "" : "s")",
                                tone: .amber)
+        }
+        if left > 0 {
+            if Date().timeIntervalSince(progressAt) > 30 * 60 {
+                return DaysVerdict(text: "\u{25CF} Uploads stuck", tone: .amber)
+            }
+            return DaysVerdict(text: "", tone: .quiet)
         }
         return DaysVerdict(text: "\u{2713} All safe", tone: .green)
     }

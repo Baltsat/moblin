@@ -154,23 +154,20 @@ struct DaysHomeView: View {
                      episode: today.number,
                      weekday: daysWeekday(today.day, tz: index.tz),
                      tz: index.tz)
-            HStack(spacing: 0) {
-                Button {
-                    path.append(.uploads)
-                } label: {
-                    HStack(spacing: 4) {
+            Button {
+                path.append(.uploads)
+            } label: {
+                HStack(spacing: 0) {
+                    if !verdict.text.isEmpty {
                         Text(verdict.text).fontWeight(.bold).foregroundStyle(verdict.color)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(verdict.color.opacity(0.7))
+                    }
+                    if count > 0 {
+                        Text("\(verdict.text.isEmpty ? "" : " \u{00B7} ")\(count) scene\(count == 1 ? "" : "s") \u{00B7} \(daysDuration(today.durationMs(now: daysNow())))")
+                            .foregroundStyle(DaysUI.muted)
                     }
                 }
-                .buttonStyle(.plain)
-                if count > 0 {
-                    Text(" \u{00B7} \(count) scene\(count == 1 ? "" : "s") \u{00B7} \(daysDuration(today.durationMs(now: daysNow())))")
-                        .foregroundStyle(DaysUI.muted)
-                }
             }
+            .buttonStyle(.plain)
             .font(.system(size: 15))
         }
     }

@@ -250,24 +250,10 @@ private struct DaysPrompterKnobs: View {
     }
 }
 
-struct DaysPrompterOverlay: View {
+private struct DaysPrompterText: View {
     @ObservedObject var prompter = DaysPrompter.shared
-    let screen: CGSize
-    let recording: Bool
+    let size: CGSize
     @State private var frames: [Int: ClosedRange<CGFloat>] = [:]
-    @State private var moving: CGSize = .zero
-    @State private var resizing: CGSize = .zero
-    @State private var showEditor = false
-
-    private var portrait: Bool {
-        screen.height >= screen.width
-    }
-
-    private var size: CGSize {
-        let width = min(max(prompter.cardSize.width + resizing.width, 240), screen.width - (portrait ? 16 : 340))
-        let height = min(max(prompter.cardSize.height + resizing.height, 110), screen.height * 0.7)
-        return CGSize(width: width, height: height)
-    }
 
     private var readLine: CGFloat {
         size.height * 0.55
@@ -286,7 +272,7 @@ struct DaysPrompterOverlay: View {
                        startPoint: .top, endPoint: .bottom)
     }
 
-    private var text: some View {
+    var body: some View {
         ZStack(alignment: .top) {
             column.blur(radius: 4).mask(band(true))
             column.mask(band(false))
@@ -343,45 +329,186 @@ struct DaysPrompterOverlay: View {
         }
         .frame(width: size.width, height: size.height, alignment: .top)
     }
+}
+
+private func daysRubber(_ value: CGFloat, _ range: ClosedRange<CGFloat>) -> CGFloat {
+    let stretch = { (excess: CGFloat) in 60 * (1 - 1 / (excess / 110 + 1)) }
+    if value < range.lowerBound {
+        return range.lowerBound - stretch(range.lowerBound - value)
+    }
+    if value > range.upperBound {
+        return range.upperBound + stretch(value - range.upperBound)
+    }
+    return value
+}
+
+private func daysNearest(_ value: CGFloat, _ stops: [CGFloat]) -> CGFloat {
+    stops.min { abs($0 - value) < abs($1 - value) } ?? value
+}
+
+struct DaysPrompterOverlay: View {
+    @ObservedObject var prompter = DaysPrompter.shared
+    let screen: CGSize
+    let recording: Bool
+    @State private var moving: CGSize = .zero
+    @State private var resizing: CGSize = .zero
+    @State private var dragging = false
+    @State private var showEditor = false
+
+    private var portrait: Bool {
+        screen.height >= screen.width
+    }
+
+    private func fit(_ wanted: CGSize) -> CGSize {
+        CGSize(width: min(max(wanted.width, 240), screen.width - (portrait ? 16 : 340)),
+               height: min(max(wanted.height, 110), screen.height - insets.bottom - top))
+    }
+
+    private var committed: CGSize {
+        fit(prompter.cardSize)
+    }
+
+    private var size: CGSize {
+        fit(CGSize(width: prompter.cardSize.width + resizing.width,
+                   height: prompter.cardSize.height + resizing.height))
+    }
+
+    private var top: CGFloat {
+        portrait ? 8 : 100
+    }
+
+    private var insets: (left: CGFloat, right: CGFloat, bottom: CGFloat) {
+        portrait ? (8, 8, 210) : (16, 130, 72)
+    }
+
+    private func xRange(_ width: CGFloat) -> ClosedRange<CGFloat> {
+        let low = insets.left - (screen.width - width) / 2
+        let high = (screen.width - width) / 2 - insets.right
+        return low <= high ? low ... high : (low + high) / 2 ... (low + high) / 2
+    }
+
+    private func yRange(_ height: CGFloat) -> ClosedRange<CGFloat> {
+        0 ... max(screen.height - insets.bottom - height - top, 0)
+    }
+
+    private func clamp(_ offset: CGSize, _ card: CGSize) -> CGSize {
+        let x = xRange(card.width), y = yRange(card.height)
+        return CGSize(width: min(max(offset.width, x.lowerBound), x.upperBound),
+                      height: min(max(offset.height, y.lowerBound), y.upperBound))
+    }
+
+    private var liveOffset: CGSize {
+        let width = prompter.position.width + moving.width + (size.width - committed.width) / 2
+        let height = prompter.position.height + moving.height
+        if resizing != .zero {
+            return CGSize(width: width, height: height)
+        }
+        return CGSize(width: daysRubber(width, xRange(size.width)), height: daysRubber(height, yRange(size.height)))
+    }
+
+    private func snap(_ predicted: CGSize) -> CGSize {
+        let x = xRange(committed.width), y = yRange(committed.height)
+        let middle = (y.lowerBound + y.upperBound) / 2
+        return CGSize(width: daysNearest(predicted.width, [x.lowerBound, min(max(0, x.lowerBound), x.upperBound), x.upperBound]),
+                      height: daysNearest(predicted.height, [y.lowerBound, middle, y.upperBound]))
+    }
+
+    private var move: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named("daysPrompterStage"))
+            .onChanged { value in
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    dragging = true
+                    moving = value.translation
+                }
+            }
+            .onEnded { value in
+                let projected = CGSize(
+                    width: prompter.position.width + value.translation.width
+                        + (value.predictedEndTranslation.width - value.translation.width) * 0.6,
+                    height: prompter.position.height + value.translation.height
+                        + (value.predictedEndTranslation.height - value.translation.height) * 0.6
+                )
+                let target = snap(projected)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.interpolatingSpring(stiffness: 260, damping: 26)) {
+                    prompter.position = target
+                    moving = .zero
+                    dragging = false
+                }
+            }
+    }
+
+    private var resize: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named("daysPrompterStage"))
+            .onChanged { value in
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    dragging = true
+                    resizing = value.translation
+                }
+            }
+            .onEnded { _ in
+                let final = size
+                var position = prompter.position
+                position.width += (final.width - committed.width) / 2
+                var widthSnap = final.width
+                let full = fit(CGSize(width: CGFloat.infinity, height: 0)).width
+                if full - final.width < 28 {
+                    widthSnap = full
+                }
+                let snapped = CGSize(width: widthSnap, height: final.height)
+                position.width += (snapped.width - final.width) / 2
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.interpolatingSpring(stiffness: 260, damping: 26)) {
+                    prompter.cardSize = snapped
+                    resizing = .zero
+                    prompter.position = clamp(position, fit(snapped))
+                    dragging = false
+                }
+            }
+    }
 
     private var corner: some View {
         Path { path in
-            path.move(to: CGPoint(x: 10, y: 0))
-            path.addQuadCurve(to: CGPoint(x: 0, y: 10), control: CGPoint(x: 10, y: 10))
+            path.move(to: CGPoint(x: 14, y: 0))
+            path.addQuadCurve(to: CGPoint(x: 0, y: 14), control: CGPoint(x: 14, y: 14))
         }
-        .stroke(.white.opacity(0.35), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-        .frame(width: 10, height: 10)
-        .padding(9)
-        .frame(width: 40, height: 40, alignment: .bottomTrailing)
+        .stroke(.white.opacity(dragging && resizing != .zero ? 0.9 : 0.45),
+                style: StrokeStyle(lineWidth: 3, lineCap: .round))
+        .frame(width: 14, height: 14)
+        .padding(10)
+        .frame(width: 60, height: 60, alignment: .bottomTrailing)
         .contentShape(Rectangle())
-        .gesture(DragGesture(minimumDistance: 0)
-            .onChanged { resizing = $0.translation }
-            .onEnded { _ in
-                prompter.cardSize = size
-                resizing = .zero
-            })
+        .highPriorityGesture(resize)
     }
 
     private var card: some View {
-        ZStack(alignment: .top) {
-            text
+        ZStack(alignment: .topLeading) {
+            DaysPrompterText(size: resizing == .zero ? size : committed)
                 .id(prompter.generation)
                 .transition(.opacity)
             if let countdown = prompter.countdown {
                 Text("\(countdown)")
                     .font(.system(size: 72, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if !prompter.playing, !prompter.paragraphs.isEmpty, recording {
                 Image(systemName: "pause.fill")
                     .font(.system(size: 10))
                     .foregroundStyle(.white.opacity(0.5))
                     .padding(.top, 15)
+                    .frame(maxWidth: .infinity)
             }
         }
-        .frame(width: size.width, height: size.height)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(daysPrompterCard.opacity(prompter.alpha)))
+        .scaleEffect(dragging && resizing == .zero ? 1.02 : 1)
+        .animation(.easeOut(duration: 0.15), value: dragging)
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .onTapGesture {
             if prompter.paragraphs.isEmpty || (!recording && !prompter.running) {
@@ -390,13 +517,7 @@ struct DaysPrompterOverlay: View {
                 prompter.toggle()
             }
         }
-        .gesture(DragGesture(minimumDistance: 8)
-            .onChanged { moving = $0.translation }
-            .onEnded { _ in
-                prompter.position = clamp(CGSize(width: prompter.position.width + moving.width,
-                                                 height: prompter.position.height + moving.height))
-                moving = .zero
-            })
+        .highPriorityGesture(move)
         .overlay(alignment: .topTrailing) {
             Button {
                 prompter.close()
@@ -429,35 +550,25 @@ struct DaysPrompterOverlay: View {
         }
     }
 
-    private func clamp(_ offset: CGSize) -> CGSize {
-        let maxX = max((screen.width - size.width) / 2, 0)
-        return CGSize(width: min(max(offset.width, -maxX), maxX),
-                      height: min(max(offset.height, -top), max(screen.height - size.height - top, 0)))
-    }
-
-    private var top: CGFloat {
-        portrait ? 8 : 100
-    }
-
     var body: some View {
         if prompter.shown {
-            let offset = clamp(CGSize(width: prompter.position.width + moving.width,
-                                      height: prompter.position.height + moving.height))
+            let offset = liveOffset
             let below = top + offset.height + size.height + 148 <= screen.height
             card
                 .overlay(alignment: .bottomLeading) {
-                    if prompter.tune {
+                    if prompter.tune, !dragging {
                         DaysPrompterKnobs()
                             .frame(height: 140)
                             .offset(y: below ? 148 : -44)
                     }
                 }
                 .offset(offset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(.top, top)
-            .fullScreenCover(isPresented: $showEditor) {
-                DaysPrompterEditor()
-            }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, top)
+                .coordinateSpace(name: "daysPrompterStage")
+                .fullScreenCover(isPresented: $showEditor) {
+                    DaysPrompterEditor()
+                }
         }
     }
 }
