@@ -2,94 +2,106 @@ import SwiftUI
 
 private let daysSeenAchKey = "daysSeenAchievements"
 
-struct DaysMainCharView: View {
-    let life: DaysLife
+struct DaysHead: View {
+    let life: DaysLife?
+    let season: Int
+    let episode: Int
+    let weekday: String
+    let tz: TimeZone
     @AppStorage(daysSeenAchKey) private var seen = ""
+    @State private var pressed: Int?
 
-    private func hours(_ minutes: Int) -> String {
-        daysDuration(Int64(minutes) * 60000)
+    private var past: [DaysLifeDay] {
+        Array((life?.days ?? []).dropLast().suffix(29).drop { $0.rec == 0 })
     }
 
-    private var banner: some View {
-        let ids = Set(seen.split(separator: ",").map(String.init))
-        let fresh = life.ach.filter { !ids.contains($0.id) }
-        return Group {
-            if let latest = fresh.last {
-                Button {
-                    seen = ids.union(life.ach.map(\.id)).sorted().joined(separator: ",")
-                } label: {
-                    HStack(spacing: 12) {
-                        Text(verbatim: "\u{2605}").font(.system(size: 22, weight: .bold)).foregroundStyle(DaysUI.amber)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("NEW \u{00B7} \(latest.t.uppercased())")
-                                .font(.system(size: 12, weight: .heavy))
-                                .tracking(1.2)
-                                .foregroundStyle(.white)
-                            Text(fresh.count > 1 ? "\(latest.sub) \u{00B7} +\(fresh.count - 1) more" : latest.sub)
-                                .font(.system(size: 12))
-                                .foregroundStyle(DaysUI.muted)
-                        }
-                        Spacer()
-                        Text(verbatim: "\u{2715}").font(.system(size: 12)).foregroundStyle(DaysUI.dim)
-                    }
-                    .padding(12)
-                    .background(Color(red: 0x2A / 255, green: 0x22 / 255, blue: 0x10 / 255),
-                                in: RoundedRectangle(cornerRadius: 12))
-                }
-                .buttonStyle(.plain)
+    private func dayName(_ iso: String) -> String {
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyy-MM-dd"
+        parser.timeZone = tz
+        guard let date = parser.date(from: iso) else {
+            return iso
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.timeZone = tz
+        formatter.dateFormat = "EEE d MMM"
+        return formatter.string(from: date)
+    }
+
+    private func subtitle(_ past: [DaysLifeDay], _ fresh: [DaysAchievement]) -> Text {
+        let episodeText = "Season \(season) \u{00B7} Episode \(episode)"
+        if let i = pressed, past.indices.contains(i) {
+            let day = past[i]
+            return Text("\(dayName(day.d)) \u{00B7} ").foregroundColor(DaysUI.muted)
+                + Text("\(Int(day.pct.rounded()))%").foregroundColor(.white).bold()
+                + Text(" of the waking day \u{00B7} \(daysDuration(Int64(day.rec) * 60000))").foregroundColor(DaysUI.muted)
+        }
+        if let latest = fresh.last {
+            return Text("\(episodeText)  ").foregroundColor(DaysUI.muted)
+                + Text("\u{2605} \(latest.t)").foregroundColor(DaysUI.amber)
+        }
+        return Text(episodeText).foregroundColor(DaysUI.muted)
+    }
+
+    private func bars(_ past: [DaysLifeDay]) -> some View {
+        let top = max(30, past.map(\.pct).max() ?? 0)
+        return HStack(alignment: .bottom, spacing: 2) {
+            ForEach(past.indices, id: \.self) { i in
+                let pct = past[i].pct
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(pressed == i ? DaysUI.red : Color.white.opacity(pct >= 25 ? 0.82 : 0.2 + 0.4 * pct / 25))
+                    .frame(width: 4, height: max(2, 30 * CGFloat(pct / top)))
             }
         }
+        .frame(height: 30, alignment: .bottom)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .gesture(DragGesture(minimumDistance: 0)
+            .onChanged { drag in
+                pressed = min(max(Int(drag.location.x / 6), 0), past.count - 1)
+            }
+            .onEnded { _ in
+                pressed = nil
+            })
+        .animation(.easeOut(duration: 0.12), value: pressed)
     }
 
     var body: some View {
-        let last = Array(life.days.suffix(30))
-        let top = max(25, last.map(\.pct).max() ?? 0)
-        let today = life.days.last
-        let up = life.avg7 >= life.prev7
-        VStack(alignment: .leading, spacing: 12) {
-            banner
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("\(Int(life.today.rounded()))%")
-                    .font(.system(size: 40, weight: .heavy, design: .rounded))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("MAIN CHARACTER TODAY")
-                        .font(.system(size: 11, weight: .heavy))
-                        .tracking(1.4)
-                        .foregroundStyle(DaysUI.red)
-                    Text("\(hours(today?.rec ?? 0)) of \(hours(today?.awake ?? 0)) awake on record")
-                        .font(.system(size: 12))
-                        .foregroundStyle(DaysUI.muted)
-                }
-                Spacer()
+        let past = past
+        let ids = Set(seen.split(separator: ",").map(String.init))
+        let fresh = (life?.ach ?? []).filter { !ids.contains($0.id) }
+        HStack(alignment: .lastTextBaseline) {
+            VStack(alignment: .leading, spacing: 6) {
+                subtitle(past, fresh)
+                    .font(.system(size: 13))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .animation(.easeOut(duration: 0.12), value: pressed)
+                    .onTapGesture {
+                        if !fresh.isEmpty {
+                            seen = ids.union((life?.ach ?? []).map(\.id)).sorted().joined(separator: ",")
+                        }
+                    }
+                Text(weekday)
+                    .font(.system(size: 40, weight: .semibold))
+                    .tracking(-1.2)
             }
-            HStack(alignment: .bottom, spacing: 3) {
-                ForEach(last.indices, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(i == last.count - 1 ? DaysUI.red
-                            : last[i].pct >= 25 ? Color.white.opacity(0.8) : Color.white.opacity(0.25))
-                        .frame(height: max(2, 44 * CGFloat(last[i].pct / top)))
-                }
+            Spacer(minLength: 12)
+            if !past.isEmpty {
+                bars(past)
+                    .alignmentGuide(.lastTextBaseline) { $0[.bottom] - 8 }
             }
-            .frame(height: 44, alignment: .bottom)
-            HStack(spacing: 12) {
-                Text("7-day \(Int(life.avg7.rounded()))% \(up ? "\u{25B2}" : "\u{25BC}") \(Int(abs(life.avg7 - life.prev7).rounded()))")
-                    .foregroundStyle(up ? DaysUI.green : DaysUI.red)
-                Text("\u{1F525} \(life.streak)-day streak")
-                Text("Best \(Int(life.best.rounded()))%")
-                Text("\(life.total_h) h total")
-            }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(DaysUI.muted)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
         }
-        .foregroundStyle(.white)
-        .padding(16)
-        .background(Color(red: 0x1F / 255, green: 0x1F / 255, blue: 0x23 / 255), in: RoundedRectangle(cornerRadius: 14))
         .onAppear {
-            if seen.isEmpty {
+            if seen.isEmpty, let life {
                 seen = life.ach.dropLast().map(\.id).joined(separator: ",")
             }
+            #if DEBUG
+                if let i = UserDefaults.standard.object(forKey: "DaysLifePressed") as? Int {
+                    pressed = i
+                }
+            #endif
         }
     }
 }

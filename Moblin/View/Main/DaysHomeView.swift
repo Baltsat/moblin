@@ -78,9 +78,6 @@ struct DaysHomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     topBar
-                    if let life = index.mac?.life {
-                        DaysMainCharView(life: life)
-                    }
                     if index.recordingNow {
                         DaysLiveStrip(index: index, isRecording: model.isRecording)
                     }
@@ -152,12 +149,11 @@ struct DaysHomeView: View {
         let verdict = index.verdict(today)
         let count = today.scenes.count
         return VStack(alignment: .leading, spacing: 6) {
-            Text("Season \(today.season) \u{00B7} Episode \(today.number)")
-                .font(.system(size: 13))
-                .foregroundStyle(DaysUI.muted)
-            Text(daysWeekday(today.day, tz: index.tz))
-                .font(.system(size: 40, weight: .semibold))
-                .tracking(-1.2)
+            DaysHead(life: index.mac?.life,
+                     season: today.season,
+                     episode: today.number,
+                     weekday: daysWeekday(today.day, tz: index.tz),
+                     tz: index.tz)
             HStack(spacing: 0) {
                 Button {
                     path.append(.uploads)
