@@ -1,14 +1,6 @@
 import SwiftUI
 import WidgetKit
 
-private struct MoblinLiveActivityIcon: View {
-    var body: some View {
-        Image("AppIcon")
-            .resizable()
-            .scaledToFit()
-    }
-}
-
 private struct IconAndTextView: View {
     let image: String
     let text: String
@@ -42,37 +34,83 @@ private struct MoblinLiveActivityStatusLabel: View {
     }
 }
 
+private let daysRed = Color(red: 0xE5 / 255, green: 0x09 / 255, blue: 0x14 / 255)
+
+private struct DaysMark: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(daysRed).frame(width: 9, height: 9)
+            Text(verbatim: "DAYS")
+                .font(.system(size: 13, weight: .heavy))
+                .tracking(3)
+                .foregroundColor(daysRed)
+        }
+    }
+}
+
+private struct DaysTimer: View {
+    let since: Date?
+    var size: CGFloat = 17
+
+    var body: some View {
+        if let since {
+            Text(timerInterval: since ... Date.distantFuture, countsDown: false)
+                .font(.system(size: size, weight: .light).monospacedDigit())
+                .foregroundColor(.white)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
 @main
 struct MoblinLiveActivityApp: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: LiveActivityAttributes.self) { context in
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    MoblinLiveActivityIcon()
-                        .frame(width: 40, height: 40)
-                    Text("Moblin is running in background")
-                        .lineLimit(1)
-                        .font(.headline)
-                        .foregroundColor(.white)
+                    DaysMark()
+                    Spacer()
+                    DaysTimer(since: context.state.since, size: 20)
+                        .frame(maxWidth: 110, alignment: .trailing)
                 }
-                Divider()
-                MoblinLiveActivityStatusLabel(state: context.state)
-                    .padding(.leading, 10)
+                Text(context.state.line ?? "Days is running in background")
+                    .font(.system(size: 17, weight: .semibold))
+                    .italic(context.state.line != nil)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .foregroundColor(.white)
+                if !context.state.functions.isEmpty || context.state.showEllipsis {
+                    MoblinLiveActivityStatusLabel(state: context.state)
+                        .font(.system(size: 13))
+                }
             }
             .padding()
-            .activityBackgroundTint(Color.black.opacity(0.8))
-        } dynamicIsland: { _ in
+            .activityBackgroundTint(Color.black.opacity(0.85))
+        } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    MoblinLiveActivityIcon()
-                        .frame(width: 36, height: 36)
+                    DaysMark()
+                        .padding(.leading, 6)
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    DaysTimer(since: context.state.since)
+                        .frame(maxWidth: 90, alignment: .trailing)
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    Text(context.state.line ?? "Days is running in background")
+                        .font(.system(size: 15, weight: .semibold))
+                        .italic(context.state.line != nil)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundColor(.white)
                 }
             } compactLeading: {
-                MoblinLiveActivityIcon()
+                Circle().fill(daysRed).frame(width: 9, height: 9)
             } compactTrailing: {
-                EmptyView()
+                DaysTimer(since: context.state.since, size: 14)
+                    .frame(maxWidth: 52)
             } minimal: {
-                MoblinLiveActivityIcon()
+                Circle().fill(daysRed).frame(width: 9, height: 9)
             }
         }
     }

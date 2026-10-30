@@ -49,10 +49,7 @@ extension Model {
             functions.append(LiveActionFunction(image: "livephoto",
                                                 text: String(localized: "Live")))
         }
-        if isRecording {
-            functions.append(LiveActionFunction(image: "record.circle",
-                                                text: String(localized: "Recording")))
-        }
+
         if database.chat.background {
             functions.append(LiveActionFunction(image: "bubble.left",
                                                 text: String(localized: "Background chat")))
@@ -67,11 +64,13 @@ extension Model {
             functions.append(LiveActionFunction(image: "pawprint",
                                                 text: String(localized: "Background printing")))
         }
+        let line = isRecording ? DaysTake.shared.line ?? "main character energy \u{00B7} capturing" : nil
+        let since = isRecording ? DaysTake.shared.since : nil
         if functions.count <= 3 {
-            return LiveActivityAttributes.ContentState(functions: functions, showEllipsis: false)
+            return LiveActivityAttributes.ContentState(functions: functions, showEllipsis: false, line: line, since: since)
         } else {
             return LiveActivityAttributes.ContentState(functions: Array(functions.prefix(2)),
-                                                       showEllipsis: true)
+                                                       showEllipsis: true, line: line, since: since)
         }
     }
 }

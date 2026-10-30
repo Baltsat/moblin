@@ -47,47 +47,6 @@ private extension View {
     return "S\(today.season):E\(today.number) \u{00B7} Scene \(number)"
 }
 
-private let daysTaglines = [
-    "main character energy · capturing",
-    "plot development in progress",
-    "this is canon",
-    "director's cut, live",
-    "episode loading…",
-    "no retakes in real life",
-    "previously on your life",
-    "the season finale is not today",
-    "cold open",
-    "unscripted, as always",
-    "roll camera, live life",
-    "the b-roll is the story",
-    "every scene counts",
-    "filmed on location: here",
-    "slow burn, good arc",
-    "character development detected",
-    "the montage starts now",
-    "based on a true story",
-    "no stunt double available",
-    "you are the pilot episode",
-    "renewed for another day",
-    "behind the scenes, in front of you",
-    "the quiet scene before the twist",
-    "this one makes the recap",
-    "lead role, no audition",
-    "today's episode, unwritten",
-    "an origin story in progress",
-    "binge-worthy, probably",
-    "the soundtrack is ambient",
-    "next episode: whatever you do now",
-]
-
-@MainActor private func daysNextTagline() -> String {
-    let key = "daysRecentTaglines"
-    let recent = UserDefaults.standard.array(forKey: key) as? [Int] ?? []
-    let pick = daysTaglines.indices.filter { !recent.contains($0) }.randomElement() ?? 0
-    UserDefaults.standard.set(Array((recent + [pick]).suffix(8)), forKey: key)
-    return daysTaglines[pick]
-}
-
 struct DaysPillView: View {
     @ObservedObject var recording: RecordingProvider
     @ObservedObject var drive: DriveStatus
@@ -95,7 +54,6 @@ struct DaysPillView: View {
     @ObservedObject var status: StatusOther
     @ObservedObject private var index = DaysIndex.shared
     @ObservedObject private var quality = DaysQuality.shared
-    @State private var tagline = ""
     let isRecording: Bool
     let isLive: Bool
     let onReconnect: () -> Void
@@ -162,24 +120,6 @@ struct DaysPillView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.75))
                         .padding(.leading, 14)
-                } else if !tagline.isEmpty {
-                    Text(tagline)
-                        .font(.system(size: 12, weight: .medium))
-                        .italic()
-                        .foregroundStyle(.white.opacity(0.5))
-                        .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
-                        .padding(.leading, 14)
-                        .transition(.opacity)
-                }
-            }
-        }
-        .onAppear {
-            tagline = daysNextTagline()
-        }
-        .onChange(of: rec) { recording in
-            if !recording {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    tagline = daysNextTagline()
                 }
             }
         }

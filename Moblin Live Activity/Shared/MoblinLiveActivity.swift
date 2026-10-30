@@ -12,6 +12,8 @@ struct LiveActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         var functions: [LiveActionFunction]
         var showEllipsis: Bool
+        var line: String?
+        var since: Date?
     }
 }
 
