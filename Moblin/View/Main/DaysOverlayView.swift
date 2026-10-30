@@ -431,11 +431,6 @@ struct DaysOverlayView: View {
             if !rec {
                 DaysQualityChip(model: model)
             }
-            DaysRoundButton(systemName: "text.alignleft", size: rec ? 40 : 44,
-                            tint: prompter.shown ? .yellow : .white)
-            {
-                prompter.shown.toggle()
-            }
             DaysRoundButton(systemName: "film.stack", size: rec ? 40 : 44) {
                 showHome = true
             }
@@ -459,6 +454,13 @@ struct DaysOverlayView: View {
             DaysFlipButton(model: model)
             DaysScreenButton()
             DaysTorchButton(model: model, overlay: model.streamOverlay)
+            DaysRoundButton(systemName: "doc.plaintext", tint: prompter.shown ? .yellow : .white) {
+                if prompter.shown {
+                    prompter.close()
+                } else {
+                    prompter.shown = true
+                }
+            }
             DaysZoomIfBack(model: model, overlay: model.streamOverlay)
         }
     }
@@ -472,7 +474,7 @@ struct DaysOverlayView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                DaysPrompterOverlay(screen: geometry.size)
+                DaysPrompterOverlay(screen: geometry.size, recording: rec)
                 content(portrait: geometry.size.height >= geometry.size.width)
             }
         }
@@ -520,9 +522,6 @@ struct DaysOverlayView: View {
                 Spacer()
                 DaysLockBadge(camera: model.camera)
                     .padding(.bottom, 10)
-                DaysPrompterControls()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 12)
                 controls
                     .padding(.bottom, 22)
                 record
@@ -535,8 +534,6 @@ struct DaysOverlayView: View {
                 VStack(alignment: .leading) {
                     pill
                     Spacer()
-                    DaysPrompterControls()
-                        .padding(.bottom, 8)
                     HStack {
                         controls
                     }
