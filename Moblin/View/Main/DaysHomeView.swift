@@ -380,6 +380,9 @@ struct DaysScrubThumb: View {
 
     private func open(at fraction: Double?) {
         guard let id = angle.youtube else {
+            if let url = angle.driveId.flatMap({ daysDriveFileUrl($0) }) {
+                UIApplication.shared.open(url)
+            }
             return
         }
         var text = "https://youtu.be/\(id)"
@@ -469,12 +472,17 @@ struct DaysScrubThumb: View {
     }
 }
 
+func daysWatchUrl(youtube: String?, drive: String?) -> URL? {
+    youtube.flatMap { daysYouTubeUrl($0) } ?? drive.flatMap { daysDriveFileUrl($0) }
+}
+
 struct DaysAngleLink<Content: View>: View {
     let youtube: String?
+    var drive: String?
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        if let youtube, let url = daysYouTubeUrl(youtube) {
+        if let url = daysWatchUrl(youtube: youtube, drive: drive) {
             Link(destination: url, label: content)
         } else {
             content()
@@ -507,7 +515,7 @@ struct DaysSceneCard: View {
                 .frame(height: height)
                 .frame(maxWidth: .infinity)
                 if let second {
-                    DaysAngleLink(youtube: second.youtube) {
+                    DaysAngleLink(youtube: second.youtube, drive: second.driveId) {
                         DaysThumb(id: second.thumbs.last, label: second.label)
                             .frame(width: 84, height: 48)
                             .clipShape(RoundedRectangle(cornerRadius: 10))

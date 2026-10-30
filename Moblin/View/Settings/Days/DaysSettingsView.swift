@@ -420,57 +420,43 @@ private struct DaysNowRecordingSection: View {
 private struct DaysQueueSection: View {
     @ObservedObject var queue: DaysQueue
 
-    private func timeText(_ item: DaysQueueItem) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, HH:mm:ss"
-        return formatter.string(from: Date(timeIntervalSince1970: Double(item.startMs) / 1000))
+    private var waiting: Int {
+        queue.items.filter { !$0.driveDone && !($0.driveTotal > 0 && $0.driveAcked >= $0.driveTotal) }.count
+    }
+
+    private var uploadedToday: Int {
+        let start = Int64(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970 * 1000)
+        return queue.items.filter { $0.driveDone && $0.startMs >= start }.count
     }
 
     var body: some View {
         Section("Queue") {
-            ForEach(queue.items) { item in
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(timeText(item))
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Image(systemName: item.finished ? "checkmark.circle.fill" : "arrow.up.circle")
-                            .foregroundStyle(item.finished ? .green : .secondary)
-                    }
-                    DaysLinkRow(title: "Drive",
-                                icon: "externaldrive",
-                                detail: daysDriveDetail(item),
-                                url: item.driveFileId.flatMap { daysDriveFileUrl($0) }
-                                    ?? queue.folderUrl(item))
-                    DaysDriveProgress(item: item, queue: queue)
-                    if item.githubQueued {
-                        DaysLinkRow(title: "GitHub",
-                                    icon: "archivebox",
-                                    detail: daysGitHubDetail(item),
-                                    url: item.githubReady ? daysGitHubReleaseUrl(item.name) : nil)
-                    }
-                    if let id = item.youTubeId {
-                        DaysLinkRow(title: "YouTube",
-                                    icon: "play.rectangle",
-                                    detail: id,
-                                    url: daysYouTubeUrl(id))
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-            if queue.items.isEmpty {
-                Text("Nothing in the queue")
-                    .foregroundStyle(.secondary)
-            }
-            Button {
-                daysOpenDriveFolder()
+            NavigationLink {
+                DaysUploadsView(index: DaysIndex.shared, drive: driveStatus, queue: queue)
             } label: {
-                Label("Open Days folder in Drive", systemImage: "folder")
+                LabeledContent {
+                    Text(waiting == 0 ? "All in Drive" : "\(waiting) waiting")
+                        .foregroundStyle(waiting == 0 ? DaysUI.green : DaysUI.amber)
+                } label: {
+                    Label("Upload queue", systemImage: "arrow.up.circle")
+                }
+            }
+            if uploadedToday > 0 {
+                LabeledContent {
+                    Text("\(uploadedToday)")
+                } label: {
+                    Label("Uploaded today", systemImage: "checkmark.circle")
+                }
             }
             Button {
                 daysOpenPlaylist()
             } label: {
                 Label("Open YouTube playlist", systemImage: "list.and.film")
+            }
+            Button {
+                daysOpenDriveFolder()
+            } label: {
+                Label("Open Days folder in Drive", systemImage: "folder")
             }
             Link(destination: daysGitHubArchiveUrl) {
                 Label("Open GitHub archive", systemImage: "archivebox")

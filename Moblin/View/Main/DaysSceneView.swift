@@ -94,7 +94,7 @@ struct DaysSceneView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(angle.thumbs, id: \.self) { id in
-                                DaysAngleLink(youtube: angle.youtube) {
+                                DaysAngleLink(youtube: angle.youtube, drive: angle.driveId) {
                                     DaysThumb(id: id, label: label)
                                         .frame(width: 96, height: 54)
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -103,11 +103,12 @@ struct DaysSceneView: View {
                         }
                     }
                 }
-                if let id = angle.youtube, let url = daysYouTubeUrl(id) {
+                if let url = daysWatchUrl(youtube: angle.youtube, drive: angle.driveId) {
                     Link(destination: url) {
                         HStack(spacing: 8) {
                             Image(systemName: "play.fill").font(.system(size: 11))
-                            Text("Watch on YouTube").font(.system(size: 15, weight: .semibold))
+                            Text(angle.youtube == nil ? "Open in Drive" : "Watch on YouTube")
+                                .font(.system(size: 15, weight: .semibold))
                         }
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
