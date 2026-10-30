@@ -132,7 +132,9 @@ extension Model {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         daysAutoPreset()
         sceneUpdated(attachCamera: true, updateRemoteScene: false)
-        daysPickStereoMic()
+        if !isRecording {
+            daysPickStereoMic()
+        }
         storeSettings()
     }
 

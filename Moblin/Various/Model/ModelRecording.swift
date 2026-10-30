@@ -45,6 +45,7 @@ extension Model {
         }
         media.setRecordUrl(url: nil)
         suspendRecording()
+        daysPickStereoMic()
     }
 
     func resumeRecording() -> Bool {
