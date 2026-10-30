@@ -227,13 +227,13 @@ enum DaysPreset: String, CaseIterable {
         switch self {
         case .auto, .allDay:
             Values(resolution: .r1920x1080, fps: 30, streamBitrate: 4_000_000,
-                   recordingCodec: .h265hevc, recordingBitrate: 10_000_000)
+                   recordingCodec: .h265hevc, recordingBitrate: 8_000_000)
         case .smooth:
             Values(resolution: .r1920x1080, fps: 60, streamBitrate: 12_000_000,
-                   recordingCodec: .h265hevc, recordingBitrate: 16_000_000)
+                   recordingCodec: .h265hevc, recordingBitrate: 14_000_000)
         case .max:
             Values(resolution: .r3840x2160, fps: 30, streamBitrate: 12_000_000,
-                   recordingCodec: .h265hevc, recordingBitrate: 45_000_000)
+                   recordingCodec: .h265hevc, recordingBitrate: 22_000_000)
         }
     }
 

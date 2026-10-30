@@ -232,7 +232,7 @@ private struct DaysRecordingSection: View {
                 if preset == .auto {
                     Text("Auto records 4K30 when there is room and the phone is not overheating; it steps down only when storage is low or the phone is very hot. Decided before each take.")
                 } else if preset == .max {
-                    Text("4K30 HEVC 45 Mbps, about 20 GB per hour.")
+                    Text("4K30 HEVC at constant quality: still scenes take little space, motion up to about 10 GB per hour.")
                 }
             }
         }
@@ -240,6 +240,9 @@ private struct DaysRecordingSection: View {
 
     private var effectiveLine: String {
         let codec = recording.videoCodec == .h264avc ? "H.264" : "HEVC"
+        if recording.videoCodec == .h265hevc {
+            return "\(stream.resolution.shortString())\(stream.fps) · HEVC constant quality"
+        }
         let mbps = Double(recording.videoBitrate) / 1_000_000
         let gb = (Double(recording.videoBitrate) + Double(recording.audioBitrate)) / 8 * 3600 / 1e9
         return String(format: "%@ · %@ %.0f Mbps · ~%.1f GB/hour",

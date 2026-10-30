@@ -1070,7 +1070,10 @@ final class Media: NSObject, @unchecked Sendable {
             AVVideoHeightKey: 0,
         ]
         var compressionProperties: [String: Any] = [:]
-        if let videoBitrate {
+        if videoCodec == .h265hevc, let videoBitrate {
+            compressionProperties[AVVideoQualityKey] = daysRecordingQuality()
+            settings[daysFallbackBitrateKey] = videoBitrate
+        } else if let videoBitrate {
             compressionProperties[AVVideoAverageBitRateKey] = videoBitrate
         }
         if let keyFrameInterval {

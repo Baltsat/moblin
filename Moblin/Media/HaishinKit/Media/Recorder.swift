@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreAudio
+import VideoToolbox
 
 struct RecorderDataSegment {
     let data: Data
@@ -354,7 +355,25 @@ final class Recorder: NSObject, @unchecked Sendable {
                 outputSettings[key] = value
             }
         }
-        return makeWriterInput(.video, outputSettings, sampleBuffer)
+        return makeWriterInput(.video, daysRecordingSettings(outputSettings), sampleBuffer)
+    }
+
+    private func daysRecordingSettings(_ settings: [String: Any]) -> [String: Any] {
+        var settings = settings
+        guard let fallback = settings.removeValue(forKey: daysFallbackBitrateKey) as? Int else {
+            return settings
+        }
+        var properties = settings[AVVideoCompressionPropertiesKey] as? [String: Any] ?? [:]
+        if let writer, writer.canApply(outputSettings: settings, forMediaType: .video) {
+            logger.info("days: recording constant quality \(properties[AVVideoQualityKey] ?? "")")
+            return settings
+        }
+        properties[AVVideoQualityKey] = nil
+        properties[AVVideoAverageBitRateKey] = fallback
+        properties[kVTCompressionPropertyKey_DataRateLimits as String] = [fallback / 4, 1]
+        settings[AVVideoCompressionPropertiesKey] = properties
+        logger.info("days: recording constant quality rejected, average \(fallback / 1000) kbps")
+        return settings
     }
 
     private func getVideoWriterInput(sampleBuffer: CMSampleBuffer) -> (any WriterInput)? {
@@ -541,6 +560,14 @@ final class Recorder: NSObject, @unchecked Sendable {
 }
 
 nonisolated(unsafe) var daysRecorderWriting = false
+let daysFallbackBitrateKey = "daysFallbackBitrate"
+
+/// science-ref: Mac VT HEVC re-encode of a 4K phone take, 0.65 ≈ 22 Mbps SSIM 0.990 (Camera-app parity); DataRateLimits
+/// makes VT ignore Quality, so there is no peak cap.
+func daysRecordingQuality() -> Double {
+    let value = UserDefaults.standard.double(forKey: "daysRecordingQuality")
+    return value > 0 ? min(value, 1) : 0.65
+}
 
 extension Recorder: AVAssetWriterDelegate {
     func assetWriter(_: AVAssetWriter,
