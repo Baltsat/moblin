@@ -112,7 +112,7 @@ struct DebugSettingsView: View {
                             .frame(width: 40)
                     }
                 }
-                Toggle(String("Enhanced Moblin SRT"), isOn: $debug.enhancedMoblinSrt)
+                Toggle(String("Enhanced SRT"), isOn: $debug.enhancedMoblinSrt)
                 NavigationLink {
                     HttpProxySettingsView(
                         model: model,

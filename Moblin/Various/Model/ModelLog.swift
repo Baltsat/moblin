@@ -29,7 +29,7 @@ extension Model {
         data += "Debug: \(logger.debugEnabled)\n\n"
         data += log.map { e in e.message }.joined(separator: "\n")
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Moblin-log-\(Date())")
+            .appendingPathComponent("Days-log-\(Date())")
             .appendingPathExtension("txt")
         try? data.write(to: url, atomically: true, encoding: .utf8)
         return url

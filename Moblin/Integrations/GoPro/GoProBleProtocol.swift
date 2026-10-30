@@ -83,7 +83,7 @@ func goProBlePackets(payload: Data, maximumPacketSize: Int = goProMaximumPacketS
 func goProPairingCompleteMessage() -> Data {
     var request = OpenGopro_RequestPairingFinish()
     request.result = .success
-    request.phoneName = "Moblin"
+    request.phoneName = "Days"
     return Data([goProPairingFeatureId, goProPairingFinishActionId]) + request.encoded()
 }
 

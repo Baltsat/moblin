@@ -606,10 +606,10 @@ struct RemoteControlSettingsView: View {
                             ExternalUrlButtonView(
                                 url: "https://moblin.mys-lang.org/moblin-remote-control-relay/assistant.html"
                             ) {
-                                Text(String("Moblin Remote Control Assistant"))
+                                Text(String("Days Remote Control Assistant"))
                             }
                             ExternalUrlButtonView(url: "https://moblinremote.com/") {
-                                Text(String("Moblin Remote Control"))
+                                Text(String("Days Remote Control"))
                             }
                         } header: {
                             Text("Websites")

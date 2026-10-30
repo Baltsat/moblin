@@ -133,22 +133,6 @@
         }
       }
     },
-    "Moblin settings" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Days Einstellungen"
-          }
-        },
-        "zh-Hant-TW" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Days 設定"
-          }
-        }
-      }
-    },
     "NSAppleMusicUsageDescription" : {
       "comment" : "Privacy - Media Library Usage Description",
       "extractionState" : "extracted_with_value",
@@ -1015,6 +999,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Days能夠在直播加入文字轉錄"
+          }
+        }
+      }
+    },
+    "Days settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Days Einstellungen"
+          }
+        },
+        "zh-Hant-TW" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Days 設定"
           }
         }
       }
