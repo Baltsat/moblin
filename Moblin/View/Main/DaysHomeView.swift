@@ -42,17 +42,7 @@ func daysWeekday(_ date: Date, tz: TimeZone, short: Bool = false) -> String {
     return formatter.string(from: date)
 }
 
-private func daysDates(_ start: Date, tz: TimeZone) -> String {
-    let formatter = DateFormatter()
-    formatter.timeZone = tz
-    formatter.locale = Locale(identifier: "en_US")
-    formatter.dateFormat = "d"
-    let end = start.addingTimeInterval(6 * 86400)
-    formatter.dateFormat = "d MMM"
-    return "\(formatter.string(from: start)) \u{2013} \(formatter.string(from: end))"
-}
-
-private func daysNow() -> Int64 {
+func daysNow() -> Int64 {
     Int64(Date().timeIntervalSince1970 * 1000)
 }
 
@@ -78,16 +68,7 @@ struct DaysHomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     topBar
-                    if index.recordingNow {
-                        DaysLiveStrip(index: index, isRecording: model.isRecording)
-                    }
-                    header
-                    rollButton
-                    todaySection
-                    weekSection
-                    ForEach(index.seasons) { season in
-                        seasonSection(season)
-                    }
+                    DaysSeasonsSection(index: index, header: AnyView(controls)) { path.append(.day($0)) }
                     settingsRow
                 }
                 .padding(.horizontal, 22)
@@ -144,31 +125,23 @@ struct DaysHomeView: View {
         }
     }
 
-    private var header: some View {
-        let today = index.today
-        let verdict = index.verdict(today)
-        let count = today.scenes.count
-        return VStack(alignment: .leading, spacing: 6) {
-            DaysHead(life: index.mac?.life,
-                     season: today.season,
-                     episode: today.number,
-                     weekday: daysWeekday(today.day, tz: index.tz),
-                     tz: index.tz)
-            Button {
-                path.append(.uploads)
-            } label: {
-                HStack(spacing: 0) {
-                    if !verdict.text.isEmpty {
-                        Text(verdict.text).fontWeight(.bold).foregroundStyle(verdict.color)
-                    }
-                    if count > 0 {
-                        Text("\(verdict.text.isEmpty ? "" : " \u{00B7} ")\(count) scene\(count == 1 ? "" : "s") \u{00B7} \(daysDuration(today.durationMs(now: daysNow())))")
-                            .foregroundStyle(DaysUI.muted)
-                    }
-                }
+    private var controls: some View {
+        let verdict = index.verdict(index.today)
+        return VStack(alignment: .leading, spacing: 12) {
+            if index.recordingNow {
+                DaysLiveStrip(index: index, isRecording: model.isRecording)
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 15))
+            rollButton
+            if !verdict.text.isEmpty {
+                Button {
+                    path.append(.uploads)
+                } label: {
+                    Text(verdict.text)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(verdict.color)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -194,16 +167,6 @@ struct DaysHomeView: View {
         .buttonStyle(.plain)
     }
 
-    @ViewBuilder
-    private var todaySection: some View {
-        if !index.today.scenes.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                DaysCaption(text: "TODAY")
-                DaysSceneList(scenes: index.today.scenes, tz: index.tz) { path.append(.scene($0)) }
-            }
-        }
-    }
-
     private var settingsRow: some View {
         Button {
             dismiss()
@@ -222,114 +185,6 @@ struct DaysHomeView: View {
             .overlay(alignment: .top) {
                 Rectangle().fill(DaysUI.line).frame(height: 1)
             }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var weekSection: some View {
-        let week = index.seasons.first?.episodes.reversed() ?? []
-        let longest = max(week.map { $0.durationMs(now: daysNow()) }.max() ?? 1, 1)
-        return VStack(alignment: .leading, spacing: 8) {
-            DaysCaption(text: "THIS WEEK")
-            HStack(spacing: 4) {
-                ForEach(0 ..< 7, id: \.self) { offset in
-                    let episode = offset < week.count ? week[offset] : nil
-                    let ms = episode?.durationMs(now: daysNow()) ?? 0
-                    let isToday = episode?.id == index.today.id
-                    VStack(spacing: 6) {
-                        ZStack(alignment: .bottom) {
-                            RoundedRectangle(cornerRadius: 6).fill(DaysUI.surface)
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(isToday ? DaysUI.red : .white)
-                                .frame(height: ms > 0 ? max(40 * CGFloat(ms) / CGFloat(longest), 3) : 0)
-                        }
-                        .frame(height: 40)
-                        Text(verbatim: ["M", "T", "W", "T", "F", "S", "S"][offset])
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(ms > 0 ? .white : Color.white.opacity(0.3))
-                        Text(ms > 0 ? daysShort(ms) : " ")
-                            .font(.system(size: 10))
-                            .foregroundStyle(DaysUI.dim)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-            }
-        }
-    }
-
-    private func daysShort(_ ms: Int64) -> String {
-        let minutes = Int((Double(ms) / 60000).rounded())
-        return minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h\(String(format: "%02d", minutes % 60))"
-    }
-
-    private func seasonSection(_ season: DaysSeason) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Season \(season.n)")
-                    .font(.system(size: 22, weight: .semibold))
-                    .tracking(-0.4)
-                DaysRecapButton(season: season.n)
-                Spacer()
-                Text("\(daysDates(season.start, tz: index.tz)) \u{00B7} \(daysDuration(season.totalMs(now: daysNow())))")
-                    .font(.system(size: 13))
-                    .foregroundStyle(DaysUI.muted)
-            }
-            .padding(.bottom, 8)
-            ForEach(season.episodes) { episode in
-                DaysDayRow(episode: episode, index: index) {
-                    if !episode.scenes.isEmpty {
-                        path.append(.day(episode.id))
-                    }
-                }
-            }
-        }
-        .padding(.top, 8)
-    }
-}
-
-private struct DaysDayRow: View {
-    let episode: DaysEpisode
-    @ObservedObject var index: DaysIndex
-    let action: () -> Void
-
-    var body: some View {
-        let ms = episode.durationMs(now: daysNow())
-        let count = episode.scenes.count
-        let isToday = episode.id == index.today.id
-        let longest = max(index.seasons.flatMap(\.episodes).map { $0.durationMs(now: daysNow()) }.max() ?? 1, 1)
-        return Button(action: action) {
-            HStack(spacing: 12) {
-                Text(verbatim: "E\(episode.number)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(DaysUI.dim)
-                    .frame(width: 28, alignment: .leading)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(daysWeekday(episode.day, tz: index.tz) + (isToday ? " \u{00B7} today" : ""))
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(count == 0 ? "no footage" : "\(count) scene\(count == 1 ? "" : "s") \u{00B7} \(episode.angleLabels)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(DaysUI.muted)
-                }
-                Spacer()
-                ZStack(alignment: .leading) {
-                    Capsule().fill(DaysUI.line)
-                    Capsule()
-                        .fill(isToday ? DaysUI.red : .white)
-                        .frame(width: 64 * CGFloat(ms) / CGFloat(longest))
-                }
-                .frame(width: 64, height: 6)
-                Text(ms > 0 ? daysDuration(ms) : "\u{2014}")
-                    .font(.system(size: 13))
-                    .foregroundStyle(isToday ? .white : Color(white: 0.7))
-                    .monospacedDigit()
-                    .frame(width: 58, alignment: .trailing)
-            }
-            .padding(.vertical, 10)
-            .opacity(count == 0 ? 0.4 : 1)
-            .overlay(alignment: .top) {
-                Rectangle().fill(DaysUI.line).frame(height: 1)
-            }
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -788,49 +643,6 @@ private struct DaysLiveStrip: View {
                 ForEach(0 ..< previews.count, id: \.self) { previews[$0] }
             }
             Spacer()
-        }
-    }
-}
-
-private struct DaysRecapButton: View {
-    let season: Int
-    @ObservedObject private var recaps = DaysRecaps.shared
-    @State private var player: AVPlayer?
-
-    var body: some View {
-        Group {
-            if let file = recaps.recaps[season] {
-                Button {
-                    player = AVPlayer(url: file)
-                    player?.play()
-                } label: {
-                    Text("\u{25B6} Recap")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(.white))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .fullScreenCover(isPresented: Binding(get: { player != nil }, set: { if !$0 { player?.pause(); player = nil } })) {
-            ZStack(alignment: .topLeading) {
-                Color.black.ignoresSafeArea()
-                if let player {
-                    VideoPlayer(player: player).ignoresSafeArea()
-                }
-                Button {
-                    player?.pause()
-                    player = nil
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                }
-                .padding(.leading, 8)
-            }
         }
     }
 }
